@@ -8,6 +8,7 @@ from datetime import datetime
 
 from .database.database import get_db
 from .database.models import *
+import numpy as np
 from .services.data_extractor import DataExtractor
 from .services.api_football_client import APIFootballClient
 from .ml.predictor import QuinielaPredictor
@@ -319,6 +320,318 @@ async def get_quiniela_oficial_predictions(season: int, db: Session = Depends(ge
         
     except Exception as e:
         logger.error(f"Error generating Quiniela oficial predictions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/quiniela/next-matches/{season}")
+async def get_next_quiniela_matches(season: int, db: Session = Depends(get_db)):
+    """
+    Obtiene los próximos partidos para la Quiniela con predicciones detalladas
+    """
+    try:
+        if not predictor.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        from .services.prediction_explainer import PredictionExplainer
+        explainer = PredictionExplainer()
+        
+        # Obtener partidos próximos (simplificado - en producción sería más sofisticado)
+        from datetime import datetime, timedelta
+        current_date = datetime.now()
+        
+        upcoming_matches = db.query(Match).filter(
+            Match.season == season,
+            Match.result.isnot(None)  # Por ahora usar partidos históricos como ejemplo
+        ).order_by(Match.match_date.desc()).limit(20).all()
+        
+        if len(upcoming_matches) < 14:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Insufficient matches available. Found {len(upcoming_matches)}, need at least 14"
+            )
+        
+        # Generar predicciones con explicaciones detalladas
+        detailed_predictions = []
+        
+        for i, match in enumerate(upcoming_matches[:14]):
+            # Obtener estadísticas
+            home_stats = db.query(TeamStatistics).filter_by(
+                team_id=match.home_team_id, season=season
+            ).first()
+            
+            away_stats = db.query(TeamStatistics).filter_by(
+                team_id=match.away_team_id, season=season
+            ).first()
+            
+            if not home_stats or not away_stats:
+                continue
+            
+            # Preparar datos para predicción
+            match_data = {
+                "home_team": {"name": match.home_team.name if match.home_team else "Unknown"},
+                "away_team": {"name": match.away_team.name if match.away_team else "Unknown"},
+                "home_stats": home_stats,
+                "away_stats": away_stats,
+                "league_id": match.league_id,
+                "match_date": match.match_date.isoformat() if match.match_date else None,
+                "h2h_data": [],
+                "home_form": [],
+                "away_form": []
+            }
+            
+            # Generar features y predicción
+            features = predictor.feature_engineer.extract_features(match_data)
+            if features:
+                feature_values = np.array([list(features.values())])
+                feature_values_scaled = predictor.scaler.transform(feature_values)
+                
+                # Predicción
+                prediction = predictor.model.predict(feature_values_scaled)[0]
+                probabilities = predictor.model.predict_proba(feature_values_scaled)[0]
+                
+                # Mapear probabilidades
+                prob_dict = {
+                    "home_win": float(probabilities[0]) if len(probabilities) > 0 else 0.33,
+                    "draw": float(probabilities[1]) if len(probabilities) > 1 else 0.33,
+                    "away_win": float(probabilities[2]) if len(probabilities) > 2 else 0.33
+                }
+                
+                # Mapear predicción a formato Quiniela
+                result_mapping = {"home_win": "1", "draw": "X", "away_win": "2"}
+                quiniela_result = result_mapping.get(prediction, "X")
+                confidence = max(prob_dict.values())
+                
+                # Generar explicación
+                explanation = explainer.generate_explanation(
+                    match_data, quiniela_result, prob_dict, features
+                )
+                
+                # Generar tabla de características
+                features_table = explainer.generate_features_table(features, match_data)
+                
+                detailed_predictions.append({
+                    "match_number": i + 1,
+                    "match_id": match.id,
+                    "home_team": match.home_team.name if match.home_team else "Unknown",
+                    "away_team": match.away_team.name if match.away_team else "Unknown",
+                    "league": "La Liga" if match.league_id == 140 else "Segunda División",
+                    "match_date": match.match_date.isoformat() if match.match_date else None,
+                    "prediction": {
+                        "result": quiniela_result,
+                        "confidence": confidence,
+                        "probabilities": prob_dict
+                    },
+                    "explanation": explanation,
+                    "features_table": features_table,
+                    "statistics": {
+                        "home_team": {
+                            "wins": home_stats.wins,
+                            "draws": home_stats.draws, 
+                            "losses": home_stats.losses,
+                            "goals_for": home_stats.goals_for,
+                            "goals_against": home_stats.goals_against,
+                            "points": home_stats.points
+                        },
+                        "away_team": {
+                            "wins": away_stats.wins,
+                            "draws": away_stats.draws,
+                            "losses": away_stats.losses, 
+                            "goals_for": away_stats.goals_for,
+                            "goals_against": away_stats.goals_against,
+                            "points": away_stats.points
+                        }
+                    }
+                })
+        
+        if len(detailed_predictions) < 14:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Could not generate sufficient predictions. Got {len(detailed_predictions)}, need 14"
+            )
+        
+        return {
+            "season": season,
+            "total_matches": len(detailed_predictions),
+            "matches": detailed_predictions[:14],
+            "generated_at": datetime.now().isoformat(),
+            "model_version": predictor.model_version
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting next Quiniela matches: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/quiniela/user/create")
+async def create_user_quiniela(
+    quiniela_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Crea una nueva quiniela del usuario
+    """
+    try:
+        from datetime import date
+        
+        # Crear quiniela
+        user_quiniela = UserQuiniela(
+            week_number=quiniela_data["week_number"],
+            season=quiniela_data["season"],
+            quiniela_date=date.fromisoformat(quiniela_data["date"]),
+            cost=quiniela_data["cost"],
+            pleno_al_15=quiniela_data.get("pleno_al_15")
+        )
+        
+        db.add(user_quiniela)
+        db.flush()  # Para obtener el ID
+        
+        # Agregar predicciones
+        for pred_data in quiniela_data["predictions"]:
+            prediction = UserQuinielaPrediction(
+                quiniela_id=user_quiniela.id,
+                match_number=pred_data["match_number"],
+                match_id=pred_data.get("match_id"),
+                home_team=pred_data["home_team"],
+                away_team=pred_data["away_team"],
+                user_prediction=pred_data["user_prediction"],
+                system_prediction=pred_data.get("system_prediction"),
+                confidence=pred_data.get("confidence"),
+                explanation=pred_data.get("explanation"),
+                prob_home=pred_data.get("prob_home"),
+                prob_draw=pred_data.get("prob_draw"),
+                prob_away=pred_data.get("prob_away"),
+                match_date=datetime.fromisoformat(pred_data["match_date"]) if pred_data.get("match_date") else None,
+                league=pred_data.get("league")
+            )
+            db.add(prediction)
+        
+        db.commit()
+        
+        return {
+            "id": user_quiniela.id,
+            "message": "Quiniela created successfully",
+            "week_number": user_quiniela.week_number,
+            "season": user_quiniela.season,
+            "cost": user_quiniela.cost
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating user quiniela: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/quiniela/user/history")
+async def get_user_quiniela_history(
+    season: Optional[int] = None,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene el histórico de quinielas del usuario
+    """
+    try:
+        query = db.query(UserQuiniela)
+        
+        if season:
+            query = query.filter(UserQuiniela.season == season)
+        
+        quinielas = query.order_by(UserQuiniela.created_at.desc()).limit(limit).all()
+        
+        result = []
+        for quiniela in quinielas:
+            result.append({
+                "id": quiniela.id,
+                "week_number": quiniela.week_number,
+                "season": quiniela.season,
+                "date": quiniela.quiniela_date.isoformat(),
+                "cost": quiniela.cost,
+                "winnings": quiniela.winnings,
+                "profit": quiniela.winnings - quiniela.cost,
+                "is_finished": quiniela.is_finished,
+                "accuracy": quiniela.accuracy,
+                "correct_predictions": quiniela.correct_predictions,
+                "total_predictions": quiniela.total_predictions,
+                "pleno_al_15": quiniela.pleno_al_15
+            })
+        
+        # Calcular estadísticas generales
+        total_cost = sum(q.cost for q in quinielas)
+        total_winnings = sum(q.winnings for q in quinielas)
+        total_profit = total_winnings - total_cost
+        finished_quinielas = [q for q in quinielas if q.is_finished]
+        avg_accuracy = sum(q.accuracy for q in finished_quinielas) / len(finished_quinielas) if finished_quinielas else 0
+        
+        return {
+            "quinielas": result,
+            "summary": {
+                "total_quinielas": len(quinielas),
+                "total_cost": total_cost,
+                "total_winnings": total_winnings,
+                "total_profit": total_profit,
+                "roi_percentage": (total_profit / total_cost * 100) if total_cost > 0 else 0,
+                "average_accuracy": avg_accuracy,
+                "finished_quinielas": len(finished_quinielas)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting user quiniela history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/quiniela/user/{quiniela_id}/results")
+async def update_quiniela_results(
+    quiniela_id: int,
+    results_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Actualiza los resultados de una quiniela cuando termine la jornada
+    """
+    try:
+        quiniela = db.query(UserQuiniela).filter(UserQuiniela.id == quiniela_id).first()
+        if not quiniela:
+            raise HTTPException(status_code=404, detail="Quiniela not found")
+        
+        # Actualizar quiniela
+        quiniela.winnings = results_data.get("winnings", 0.0)
+        quiniela.is_finished = True
+        
+        correct_predictions = 0
+        
+        # Actualizar resultados de cada predicción
+        for result in results_data.get("results", []):
+            prediction = db.query(UserQuinielaPrediction).filter(
+                UserQuinielaPrediction.quiniela_id == quiniela_id,
+                UserQuinielaPrediction.match_number == result["match_number"]
+            ).first()
+            
+            if prediction:
+                prediction.actual_result = result["actual_result"]
+                prediction.is_correct = prediction.user_prediction == result["actual_result"]
+                
+                if prediction.is_correct:
+                    correct_predictions += 1
+        
+        # Actualizar estadísticas de la quiniela
+        quiniela.correct_predictions = correct_predictions
+        quiniela.accuracy = correct_predictions / quiniela.total_predictions if quiniela.total_predictions > 0 else 0
+        
+        db.commit()
+        
+        return {
+            "id": quiniela.id,
+            "correct_predictions": correct_predictions,
+            "accuracy": quiniela.accuracy,
+            "winnings": quiniela.winnings,
+            "profit": quiniela.winnings - quiniela.cost,
+            "message": "Results updated successfully"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating quiniela results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, Boolean, ForeignKey, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -161,3 +161,104 @@ class ModelPerformance(Base):
     
     is_active = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserQuiniela(Base):
+    """
+    Quinielas personales del usuario
+    """
+    __tablename__ = "user_quinielas"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    week_number = Column(Integer, nullable=False)
+    season = Column(Integer, nullable=False)
+    quiniela_date = Column(Date, nullable=False)
+    cost = Column(Float, nullable=False)  # Lo que se gastó
+    winnings = Column(Float, default=0.0)  # Lo que se ganó
+    is_finished = Column(Boolean, default=False)  # Si la jornada terminó
+    pleno_al_15 = Column(String(1), nullable=True)  # "0", "1", "2", "M"
+    
+    # Estadísticas de la quiniela
+    total_predictions = Column(Integer, default=14)
+    correct_predictions = Column(Integer, default=0)
+    accuracy = Column(Float, default=0.0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relación con las predicciones
+    predictions = relationship("UserQuinielaPrediction", back_populates="quiniela", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<UserQuiniela(week={self.week_number}, season={self.season}, cost={self.cost})>"
+
+
+class UserQuinielaPrediction(Base):
+    """
+    Predicciones individuales de cada partido en una quiniela del usuario
+    """
+    __tablename__ = "user_quiniela_predictions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quiniela_id = Column(Integer, ForeignKey("user_quinielas.id"), nullable=False)
+    match_number = Column(Integer, nullable=False)  # 1-14
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=True)  # Partido real si está disponible
+    
+    # Equipos
+    home_team = Column(String, nullable=False)
+    away_team = Column(String, nullable=False)
+    
+    # Predicción del usuario
+    user_prediction = Column(String(1), nullable=False)  # "1", "X", "2"
+    
+    # Resultado real (se rellena cuando termine el partido)
+    actual_result = Column(String(1), nullable=True)  # "1", "X", "2"
+    is_correct = Column(Boolean, nullable=True)
+    
+    # Datos de la predicción del sistema
+    system_prediction = Column(String(1), nullable=True)  # Lo que predijo el sistema
+    confidence = Column(Float, nullable=True)  # Confianza del sistema
+    explanation = Column(Text, nullable=True)  # Explicación de la predicción
+    
+    # Probabilidades del sistema
+    prob_home = Column(Float, nullable=True)
+    prob_draw = Column(Float, nullable=True)
+    prob_away = Column(Float, nullable=True)
+    
+    # Metadatos
+    match_date = Column(DateTime, nullable=True)
+    league = Column(String, nullable=True)
+    
+    # Relaciones
+    quiniela = relationship("UserQuiniela", back_populates="predictions")
+    match = relationship("Match", foreign_keys=[match_id])
+    
+    def __repr__(self):
+        return f"<UserQuinielaPrediction(match={self.match_number}, prediction='{self.user_prediction}')>"
+
+
+class QuinielaWeekSchedule(Base):
+    """
+    Programación semanal de la Quiniela oficial
+    """
+    __tablename__ = "quiniela_week_schedule"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    week_number = Column(Integer, nullable=False)
+    season = Column(Integer, nullable=False)
+    week_start_date = Column(Date, nullable=False)
+    week_end_date = Column(Date, nullable=False)
+    deadline = Column(DateTime, nullable=False)  # Hora límite para apostar
+    is_active = Column(Boolean, default=True)
+    
+    # Estado de la jornada
+    is_predictions_ready = Column(Boolean, default=False)
+    is_finished = Column(Boolean, default=False)
+    results_available = Column(Boolean, default=False)
+    
+    # Metadatos
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<QuinielaWeekSchedule(week={self.week_number}, season={self.season})>"
