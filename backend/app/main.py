@@ -239,6 +239,89 @@ async def get_current_week_predictions(season: int, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/predictions/quiniela-oficial/{season}")
+async def get_quiniela_oficial_predictions(season: int, db: Session = Depends(get_db)):
+    """
+    Genera predicciones específicas para la Quiniela Española oficial
+    Incluye selección de 14 partidos + Pleno al 15 + análisis de valor
+    """
+    try:
+        if not predictor.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        # Obtener partidos disponibles para la jornada
+        extractor = DataExtractor(db)
+        
+        # Buscar partidos próximos (implementación simplificada)
+        from datetime import datetime, timedelta
+        current_date = datetime.now()
+        
+        # Obtener partidos de los próximos 7 días
+        upcoming_matches = db.query(Match).filter(
+            Match.season == season,
+            Match.match_date >= current_date,
+            Match.match_date <= current_date + timedelta(days=7),
+            Match.result.is_(None)  # Solo partidos no jugados
+        ).all()
+        
+        if not upcoming_matches:
+            # Si no hay partidos próximos, usar los últimos partidos como ejemplo
+            upcoming_matches = db.query(Match).filter(
+                Match.season == season,
+                Match.result.isnot(None)
+            ).order_by(Match.match_date.desc()).limit(20).all()
+        
+        if len(upcoming_matches) < 14:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Insufficient matches for Quiniela. Found {len(upcoming_matches)}, need at least 14"
+            )
+        
+        # Preparar datos de partidos para el predictor
+        matches_data = []
+        for match in upcoming_matches:
+            # Obtener estadísticas de equipos
+            home_stats = db.query(TeamStatistics).filter_by(
+                team_id=match.home_team_id, season=season
+            ).first()
+            
+            away_stats = db.query(TeamStatistics).filter_by(
+                team_id=match.away_team_id, season=season
+            ).first()
+            
+            match_data = {
+                "home_team": {
+                    "api_id": match.home_team.api_id if match.home_team else None,
+                    "name": match.home_team.name if match.home_team else "Unknown"
+                },
+                "away_team": {
+                    "api_id": match.away_team.api_id if match.away_team else None,
+                    "name": match.away_team.name if match.away_team else "Unknown"
+                },
+                "league_id": match.league_id,
+                "match_date": match.match_date.isoformat() if match.match_date else None,
+                "round": match.round,
+                "home_stats": home_stats,
+                "away_stats": away_stats,
+                "home_odds": match.home_odds,
+                "draw_odds": match.draw_odds,
+                "away_odds": match.away_odds,
+                "h2h_data": [],  # Simplificado por ahora
+                "home_form": [],  # Simplificado por ahora
+                "away_form": []   # Simplificado por ahora
+            }
+            matches_data.append(match_data)
+        
+        # Generar predicciones oficiales de Quiniela
+        quiniela_predictions = predictor.predict_quiniela_official(matches_data, season)
+        
+        return quiniela_predictions
+        
+    except Exception as e:
+        logger.error(f"Error generating Quiniela oficial predictions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/predictions/history", response_model=List[HistoricalPredictionResponse])
 async def get_prediction_history(season: int, limit: int = 10, db: Session = Depends(get_db)):
     """Get historical prediction performance"""

@@ -240,6 +240,132 @@ class QuinielaPredictor:
             "percentage_of_bankroll": (total_stake / bankroll) * 100 if bankroll > 0 else 0
         }
     
+    def predict_quiniela_official(self, matches_data: List[Dict[str, Any]], season: int) -> Dict[str, Any]:
+        """
+        Genera predicciones específicas para la Quiniela Española oficial
+        Considera las reglas específicas: 14 partidos + Pleno al 15
+        """
+        from .quiniela_optimizer import QuinielaOptimizer
+        
+        optimizer = QuinielaOptimizer()
+        
+        # Paso 1: Seleccionar los 14 mejores partidos para la quiniela
+        if len(matches_data) > 14:
+            selected_matches = optimizer.select_quiniela_matches(matches_data, season)
+            logging.info(f"Selected {len(selected_matches)} matches from {len(matches_data)} available")
+        else:
+            selected_matches = matches_data
+            logging.warning(f"Only {len(matches_data)} matches available, need 14 for official Quiniela")
+        
+        # Paso 2: Generar predicciones para los 14 partidos
+        match_predictions = []
+        for i, match_data in enumerate(selected_matches[:14]):
+            features = self.feature_engineer.extract_features(match_data)
+            if features:
+                feature_values = np.array([list(features.values())])
+                feature_values_scaled = self.scaler.transform(feature_values)
+                
+                # Predicción
+                prediction = self.model.predict(feature_values_scaled)[0]
+                probabilities = self.model.predict_proba(feature_values_scaled)[0]
+                
+                # Mapear probabilidades a resultados
+                prob_dict = {
+                    "home_win": probabilities[0] if len(probabilities) > 0 else 0.33,
+                    "draw": probabilities[1] if len(probabilities) > 1 else 0.33,
+                    "away_win": probabilities[2] if len(probabilities) > 2 else 0.33
+                }
+                
+                # Mapear predicción a formato Quiniela
+                result_mapping = {"home_win": "1", "draw": "X", "away_win": "2"}
+                quiniela_result = result_mapping.get(prediction, "X")
+                
+                # Calcular goles esperados para el Pleno al 15
+                expected_goals = self._estimate_expected_goals(match_data, features)
+                
+                match_predictions.append({
+                    "match_number": i + 1,
+                    "home_team": match_data.get("home_team", {}).get("name", "Unknown"),
+                    "away_team": match_data.get("away_team", {}).get("name", "Unknown"),
+                    "predicted_result": quiniela_result,
+                    "confidence": max(prob_dict.values()),
+                    "probabilities": prob_dict,
+                    "expected_goals": expected_goals,
+                    "match_date": match_data.get("match_date"),
+                    "league": "La Liga" if match_data.get("league_id") == 140 else "Segunda División"
+                })
+        
+        # Paso 3: Generar predicción del Pleno al 15
+        pleno_al_15 = optimizer.generate_pleno_al_15_prediction(match_predictions)
+        
+        # Paso 4: Calcular valor esperado de la quiniela
+        quiniela_value = optimizer.calculate_combination_value(match_predictions)
+        
+        # Paso 5: Generar combinaciones múltiples si es beneficioso
+        multiple_combinations = optimizer.suggest_multiple_combinations(match_predictions)
+        
+        # Paso 6: Calcular estadísticas de la quiniela
+        avg_confidence = sum(p['confidence'] for p in match_predictions) / len(match_predictions)
+        high_confidence_matches = sum(1 for p in match_predictions if p['confidence'] > 0.7)
+        
+        return {
+            "quiniela_type": "oficial_espanola",
+            "total_matches": len(match_predictions),
+            "predictions": match_predictions,
+            "pleno_al_15": {
+                "prediction": pleno_al_15,
+                "description": f"Predicción de goles: {pleno_al_15}",
+                "note": "Solo válido si aciertas los 14 partidos"
+            },
+            "statistics": {
+                "average_confidence": avg_confidence,
+                "high_confidence_matches": high_confidence_matches,
+                "expected_accuracy": avg_confidence,
+                "la_liga_matches": sum(1 for p in match_predictions if p.get('league') == 'La Liga'),
+                "segunda_matches": sum(1 for p in match_predictions if p.get('league') == 'Segunda División')
+            },
+            "value_analysis": quiniela_value,
+            "multiple_combinations": multiple_combinations,
+            "betting_recommendation": {
+                "recommended": quiniela_value['expected_value'] > 0,
+                "confidence_level": "Alta" if avg_confidence > 0.65 else "Media" if avg_confidence > 0.55 else "Baja",
+                "strategy": "Conservadora" if high_confidence_matches < 8 else "Agresiva"
+            },
+            "generated_at": datetime.now().isoformat(),
+            "model_version": self.model_version
+        }
+    
+    def _estimate_expected_goals(self, match_data: Dict, features: Dict) -> float:
+        """
+        Estima el número esperado de goles para un partido
+        Usado para el Pleno al 15
+        """
+        home_stats = match_data.get("home_stats")
+        away_stats = match_data.get("away_stats")
+        
+        if home_stats and away_stats:
+            # Goles promedio por partido
+            home_goals_avg = home_stats.goals_for / max(home_stats.matches_played, 1)
+            away_goals_avg = away_stats.goals_for / max(away_stats.matches_played, 1)
+            
+            # Goles concedidos promedio
+            home_conceded_avg = home_stats.goals_against / max(home_stats.matches_played, 1)
+            away_conceded_avg = away_stats.goals_against / max(away_stats.matches_played, 1)
+            
+            # Estimación usando promedios
+            expected_home_goals = (home_goals_avg + away_conceded_avg) / 2
+            expected_away_goals = (away_goals_avg + home_conceded_avg) / 2
+            
+            total_expected = expected_home_goals + expected_away_goals
+            
+            # Ajustar por factores del partido
+            if features.get('home_advantage', 0) > 0.1:
+                total_expected *= 1.1  # Ventaja local aumenta goles
+            
+            return max(0.5, min(6.0, total_expected))  # Límites razonables
+        
+        return 2.5  # Default esperado
+    
     def save_model(self, filepath: str) -> None:
         """Save trained model to disk"""
         if not self.is_trained:
