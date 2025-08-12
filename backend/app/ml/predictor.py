@@ -110,8 +110,9 @@ class QuinielaPredictor:
         # Cross-validation score
         cv_scores = cross_val_score(self.model, X_train_scaled, y_train, cv=5, scoring='accuracy')
         
-        # Feature importance (from Random Forest component)
-        rf_feature_importance = rf_model.feature_importances_
+        # Feature importance (from Random Forest component of the ensemble)
+        rf_estimator = self.model.named_estimators_['rf']
+        rf_feature_importance = rf_estimator.feature_importances_
         feature_importance_dict = dict(zip(self.feature_names, rf_feature_importance))
         
         self.is_trained = True
