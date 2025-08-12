@@ -8,8 +8,10 @@ Predecir los resultados de los 15 partidos semanales de la Quiniela Española (P
 
 ## ⚡ Características Principales
 
-- **Predicciones ML**: Modelos ensemble (Random Forest + XGBoost) con +30 características
+- **Predicciones ML**: Modelos ensemble (Random Forest + XGBoost) con +40 características
 - **Dashboard Interactivo**: Visualización en tiempo real de predicciones y rendimiento
+- **Gestión Personal de Quinielas**: Sistema completo para crear, guardar y trackear tus quinielas
+- **Explicaciones Detalladas**: Cada predicción incluye análisis razonado y factores decisivos
 - **Análisis Financiero**: Seguimiento de ROI, beneficios y estrategias de apuestas
 - **Gestión de Datos**: Integración automática con API-Football
 - **Historial Completo**: Tracking de precisión y rendimiento por jornada
@@ -151,6 +153,38 @@ python scripts/run_predictions.py --season 2024 --week 15
 
 Acceder al dashboard en: `http://localhost:8501`
 
+#### Funcionalidades del Dashboard:
+
+**🎯 Mi Quiniela Personal**
+- **Próximos Partidos**: Ver predicciones con explicaciones detalladas
+- **Mi Historial**: Tracking completo de tus quinielas guardadas
+- **Actualizar Resultados**: Registrar resultados reales y calcular ganancias
+
+**📊 Predicciones del Sistema**
+- Predicciones automáticas para la jornada actual
+- Estrategias de apuestas recomendadas
+- Análisis de confianza por partido
+
+**📈 Análisis de Rendimiento**
+- Gráficos de precisión histórica
+- Tracking de beneficios acumulados
+- Métricas de rendimiento del modelo
+
+**💰 Análisis Financiero**
+- ROI detallado por jornada
+- Beneficios/pérdidas acumulados
+- Análisis de rentabilidad
+
+**🔧 Gestión de Datos**
+- Actualización de equipos y partidos
+- Estado de la base de datos
+- Herramientas de mantenimiento
+
+**🤖 Modelo ML**
+- Entrenamiento del modelo
+- Importancia de características
+- Métricas de rendimiento
+
 ## 📈 Estrategias de Apuestas
 
 ### Criterio Kelly Simplificado
@@ -209,6 +243,13 @@ Acceder al dashboard en: `http://localhost:8501`
 ### Predicciones
 - `GET /predictions/current-week` - Predicciones actuales
 - `GET /predictions/history` - Historial de predicciones
+- `GET /quiniela/next-matches/{season}` - Próximos partidos con explicaciones
+- `GET /predictions/quiniela-oficial/{season}` - Predicciones formato Quiniela oficial
+
+### Gestión Personal de Quinielas
+- `POST /quiniela/user/create` - Crear nueva quiniela personal
+- `GET /quiniela/user/history` - Historial de quinielas del usuario
+- `PUT /quiniela/user/{id}/results` - Actualizar resultados y ganancias
 
 ### Analytics
 - `GET /analytics/model-performance` - Rendimiento del modelo
@@ -265,13 +306,21 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ## 💡 Roadmap
 
-### Versión 1.1
+### Versión 1.1 ✅ COMPLETADO
+- [x] Sistema completo de gestión personal de quinielas
+- [x] Explicaciones detalladas de predicciones con análisis razonado
+- [x] Dashboard interactivo con 6 secciones principales
+- [x] Tracking completo de ROI y beneficios personales
+- [x] Base de datos expandida con tablas de usuario
+- [x] API endpoints para gestión completa del usuario
+
+### Versión 1.2
 - [ ] Modelo de Deep Learning (LSTM/Transformer)
 - [ ] Integración con múltiples casas de apuestas
 - [ ] Alertas automáticas vía email/Telegram
 - [ ] Análisis de lesiones y suspensiones
 
-### Versión 1.2
+### Versión 1.3
 - [ ] Frontend React/Vue avanzado
 - [ ] API móvil (React Native)
 - [ ] Backtesting histórico automático
