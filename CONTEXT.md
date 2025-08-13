@@ -636,8 +636,115 @@ LA_LIGA = 140
 SEGUNDA_DIVISION = 141
 ```
 
+### Sistema Híbrido de Predicciones (v1.4.0)
+
+**Implementación Final (2025-08-13):**
+El sistema ahora combina inteligentemente datos históricos con heurísticas básicas para generar las mejores predicciones posibles según los datos disponibles.
+
+**Funcionamiento del Sistema Híbrido:**
+```python
+# En backend/app/ml/basic_predictor.py
+def _get_historical_performance(self, team: Team) -> float:
+    # Busca estadísticas de temporadas 2024, 2023
+    # Calcula rendimiento normalizado por puntos por partido
+    # Pesa temporadas más recientes (70% vs 30%)
+    
+def predict_match(self, home_team: Team, away_team: Team, use_historical: bool = True):
+    # Pesos adaptativos según disponibilidad de datos:
+    if use_historical and datos_disponibles:
+        weights = {
+            'historical': 0.4,      # Rendimiento pasado
+            'experience': 0.2,      # Experiencia club
+            'stadium': 0.15,        # Capacidad estadio
+            'league': 0.25          # Nivel liga
+        }
+    else:
+        # Sin datos históricos: redistribuir pesos
+        weights = {'historical': 0.0, 'experience': 0.35, 'stadium': 0.25, 'league': 0.4}
+```
+
+**Beneficios del Sistema Híbrido:**
+- ✅ **Precisión Mejorada**: Usa datos reales cuando están disponibles
+- ✅ **Adaptabilidad**: Conforme avance 2025, incorpora nuevos datos automáticamente
+- ✅ **Robustez**: Siempre genera predicciones, incluso sin datos históricos
+- ✅ **Transparencia**: Explica qué método y datos se usaron
+
+### Gestión Completa de Base de Datos
+
+**Funcionalidad de Borrado Implementada (v1.4.0):**
+- **Endpoint Seguro**: `DELETE /data/clear-all?confirm=DELETE_ALL_DATA`
+- **Interfaz Dashboard**: Sección en "Gestión de Datos" con confirmación obligatoria
+- **Orden Correcto**: Elimina datos respetando foreign key constraints
+- **Reset Automático**: Reinicia secuencias PostgreSQL para IDs limpios
+
+**Protocolo de Borrado:**
+```python
+# Orden de eliminación para respetar foreign keys:
+1. user_quiniela_predictions  # Predicciones de usuario
+2. user_quinielas            # Quinielas de usuario
+3. team_statistics           # Estadísticas de equipos
+4. matches                   # Partidos
+5. teams                     # Equipos (al final)
+
+# Reset de secuencias PostgreSQL
+ALTER SEQUENCE teams_id_seq RESTART WITH 1
+ALTER SEQUENCE matches_id_seq RESTART WITH 1
+# ... etc
+```
+
+### Selección Inteligente de Partidos para Quiniela
+
+**Lógica Mejorada (v1.4.0):**
+```python
+# Solo ligas españolas para Quiniela oficial
+SPANISH_LEAGUES = [140, 141]  # La Liga, Segunda División
+
+# Estrategia de selección:
+1. Filtrar solo partidos de ligas españolas sin resultado
+2. Agrupar por jornadas (mismo 'round' o fecha cercana)
+3. Seleccionar jornada con más partidos disponibles (≥10)
+4. Priorizar: máximo 10 La Liga + completar con Segunda hasta 15
+5. Fallback: primeros 15 partidos cronológicos si no hay jornada completa
+```
+
+**Ejemplo de Selección:**
+```python
+# Jornada 1 - agosto 2025:
+la_liga_matches = [Girona-Rayo, Barcelona-Valencia, ...]     # 10 partidos
+segunda_matches = [Almería-Burgos, Cádiz-Mirandés, ...]     # 5 partidos
+selected_matches = la_liga_matches[:10] + segunda_matches[:5]  # 15 total
+```
+
+### Troubleshooting Actualizado
+
+**Problemas Resueltos en v1.4.0:**
+
+1. **Error 400 en `/model/train?season=2025`**:
+   - **ANTES**: HTTPException "insufficient data"
+   - **AHORA**: Fallback automático a temporada 2024 con mensaje informativo
+
+2. **Partidos incorrectos en Quiniela**:
+   - **ANTES**: Partidos aleatorios de cualquier liga
+   - **AHORA**: Solo ligas españolas agrupados por jornadas
+
+3. **Falta gestión de base de datos**:
+   - **ANTES**: Imposible limpiar datos desde interfaz
+   - **AHORA**: Función completa de borrado con confirmación segura
+
+**Comandos de Verificación:**
+```bash
+# Verificar entrenamiento fallback
+curl -X POST "localhost:8000/model/train?season=2025"
+
+# Verificar predicciones híbridas
+curl -X GET "localhost:8000/quiniela/next-matches/2025"
+
+# Verificar borrado (¡CUIDADO!)
+curl -X DELETE "localhost:8000/data/clear-all?confirm=DELETE_ALL_DATA"
+```
+
 ---
 
 **Última actualización**: 2025-08-13
-**Versión**: 1.3.0
+**Versión**: 1.4.0
 **Maintainer**: Sistema Quiniela Predictor

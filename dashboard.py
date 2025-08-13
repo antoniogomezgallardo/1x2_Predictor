@@ -50,6 +50,8 @@ def make_api_request(endpoint: str, params: dict = None, method: str = "GET", sh
         
         if method == "POST":
             response = requests.post(url, json=params, timeout=30)
+        elif method == "DELETE":
+            response = requests.delete(url, params=params, timeout=30)
         else:
             response = requests.get(url, params=params, timeout=30)
         
@@ -874,6 +876,82 @@ def main():
             else:
                 st.warning("⚠️ No se pudo obtener el estado de los datos")
                 st.info("Asegúrate de que la API esté funcionando correctamente")
+            
+            # Sección de borrar datos
+            st.markdown("---")
+            st.subheader("🗑️ Borrar Datos")
+            st.error("⚠️ **ZONA PELIGROSA** - Esta acción NO se puede deshacer")
+            
+            with st.expander("🚨 Borrar TODOS los datos de la base de datos"):
+                st.markdown("""
+                **Esta acción eliminará TODOS los datos:**
+                - ❌ Todos los equipos
+                - ❌ Todos los partidos 
+                - ❌ Todas las estadísticas
+                - ❌ Todas las quinielas guardadas
+                - ❌ Todo el historial
+                
+                **⚠️ ESTA ACCIÓN NO SE PUEDE DESHACER ⚠️**
+                """)
+                
+                # Requerir confirmación explícita
+                confirm_delete = st.text_input(
+                    "Para confirmar, escribe: BORRAR_TODO",
+                    placeholder="Escribe BORRAR_TODO para confirmar",
+                    key="confirm_delete_input"
+                )
+                
+                col_btn1, col_btn2 = st.columns(2)
+                
+                with col_btn1:
+                    delete_enabled = confirm_delete == "BORRAR_TODO"
+                    
+                    if st.button(
+                        "🗑️ BORRAR TODOS LOS DATOS", 
+                        type="primary" if delete_enabled else "secondary",
+                        disabled=not delete_enabled,
+                        key="btn_delete_all"
+                    ):
+                        if delete_enabled:
+                            with st.spinner("🗑️ Borrando todos los datos..."):
+                                # Llamar al endpoint de borrar datos
+                                result = make_api_request(
+                                    "/data/clear-all?confirm=DELETE_ALL_DATA", 
+                                    method="DELETE"
+                                )
+                                
+                                if result:
+                                    st.success("✅ Todos los datos han sido borrados exitosamente")
+                                    
+                                    # Mostrar resumen de lo que se borró
+                                    if 'records_deleted' in result:
+                                        deleted = result['records_deleted']
+                                        st.info(f"""
+                                        **Registros eliminados:**
+                                        - Equipos: {deleted.get('teams', 0)}
+                                        - Partidos: {deleted.get('matches', 0)}  
+                                        - Estadísticas: {deleted.get('team_statistics', 0)}
+                                        - Quinielas: {deleted.get('user_quinielas', 0)}
+                                        - Predicciones: {deleted.get('user_quiniela_predictions', 0)}
+                                        """)
+                                    
+                                    # Mostrar próximos pasos
+                                    if 'next_steps' in result:
+                                        st.info("**Próximos pasos recomendados:**")
+                                        for step in result['next_steps']:
+                                            st.write(f"• {step}")
+                                    
+                                    # Refrescar la página
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Error al borrar los datos")
+                        else:
+                            st.error("⚠️ Debes escribir 'BORRAR_TODO' para confirmar")
+                
+                with col_btn2:
+                    st.write("")  # Espaciado
+                    if st.button("❌ Cancelar", key="btn_cancel_delete"):
+                        st.rerun()
     
     with tab6:
         st.header("🤖 Gestión del Modelo de Machine Learning")

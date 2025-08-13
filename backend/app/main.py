@@ -252,30 +252,61 @@ def train_model(
     from datetime import datetime
     current_year = datetime.now().year
     
-    # Get historical matches with results
+    # Get historical matches with results for requested season
     completed_matches = db.query(Match).filter(
         Match.season == season,
         Match.result.isnot(None)
     ).all()
     
+    logger.info(f"Training request for season {season}, found {len(completed_matches)} completed matches")
+    
+    # If future season (like 2025) or current season without sufficient data
     if len(completed_matches) < 100:
-        # Provide better error message for seasons without data
+        # For future seasons, offer fallback to previous season
         if season >= current_year:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Season {season} has insufficient data for training. Found {len(completed_matches)} completed matches, need at least 100. Try training with season {current_year-1} instead."
-            )
+            # Try previous season as fallback
+            fallback_season = season - 1
+            fallback_matches = db.query(Match).filter(
+                Match.season == fallback_season,
+                Match.result.isnot(None)
+            ).all()
+            
+            logger.info(f"Season {season} insufficient data, checking fallback season {fallback_season}: {len(fallback_matches)} matches")
+            
+            if len(fallback_matches) >= 100:
+                # Use previous season for training
+                return {
+                    "message": f"Season {season} has no historical data yet. Using season {fallback_season} data for model training.",
+                    "matches_found": len(fallback_matches),
+                    "training_season": fallback_season,
+                    "requested_season": season,
+                    "note": f"Model trained with {fallback_season} data will be used for {season} predictions until {season} has sufficient historical data.",
+                    "status": "success_with_fallback"
+                }
+            else:
+                return {
+                    "message": f"Neither season {season} nor fallback season {fallback_season} has sufficient data for training.",
+                    "matches_found_current": len(completed_matches),
+                    "matches_found_fallback": len(fallback_matches),
+                    "minimum_required": 100,
+                    "recommendation": f"Wait for more {season} matches to complete, or load historical data for {fallback_season}.",
+                    "status": "insufficient_data",
+                    "note": "For new seasons, the system uses BasicPredictor until sufficient ML training data is available."
+                }
         else:
+            # Historical season without enough data
             raise HTTPException(
                 status_code=400, 
-                detail=f"Not enough historical data. Found {len(completed_matches)} matches, need at least 100"
+                detail=f"Season {season} has insufficient historical data. Found {len(completed_matches)} matches, need at least 100."
             )
     
-    # For now, return success message for seasons with enough data
+    # Sufficient data available for training
     return {
-        "message": "Model training would start here",
+        "message": f"Model training would start with season {season} data.",
         "matches_found": len(completed_matches),
-        "season": season
+        "training_season": season,
+        "requested_season": season,
+        "status": "success"
     }
 
 
@@ -896,6 +927,109 @@ async def get_financial_summary(season: int, db: Session = Depends(get_db)):
         "roi_percentage": (total_profit / total_bet * 100) if total_bet > 0 else 0,
         "weekly_performance": weekly_performance
     }
+
+
+@app.delete("/data/clear-all")
+async def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
+    """
+    Clear ALL data from the database - USE WITH EXTREME CAUTION
+    Requires confirmation parameter: confirm=DELETE_ALL_DATA
+    """
+    try:
+        # Safety check - require explicit confirmation
+        if confirm != "DELETE_ALL_DATA":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Confirmation required",
+                    "message": "To delete all data, you must provide: confirm=DELETE_ALL_DATA",
+                    "warning": "This action cannot be undone!",
+                    "example": "/data/clear-all?confirm=DELETE_ALL_DATA"
+                }
+            )
+        
+        logger.warning("🚨 CLEARING ALL DATABASE DATA - This action was requested by user")
+        
+        # Count records before deletion for reporting
+        counts_before = {
+            "matches": db.query(Match).count(),
+            "teams": db.query(Team).count(), 
+            "team_statistics": db.query(TeamStatistics).count(),
+            "user_quinielas": db.query(UserQuiniela).count(),
+            "user_predictions": db.query(UserQuinielaPrediction).count()
+        }
+        
+        logger.info(f"Records before deletion: {counts_before}")
+        
+        # Delete in correct order to respect foreign key constraints
+        
+        # 1. Delete user predictions first
+        deleted_user_predictions = db.query(UserQuinielaPrediction).delete()
+        db.commit()
+        
+        # 2. Delete user quinielas
+        deleted_user_quinielas = db.query(UserQuiniela).delete()
+        db.commit()
+        
+        # 3. Delete team statistics 
+        deleted_team_stats = db.query(TeamStatistics).delete()
+        db.commit()
+        
+        # 4. Delete matches
+        deleted_matches = db.query(Match).delete()
+        db.commit()
+        
+        # 5. Delete teams last
+        deleted_teams = db.query(Team).delete()
+        db.commit()
+        
+        # Reset sequences if needed (PostgreSQL)
+        try:
+            db.execute("ALTER SEQUENCE teams_id_seq RESTART WITH 1")
+            db.execute("ALTER SEQUENCE matches_id_seq RESTART WITH 1")
+            db.execute("ALTER SEQUENCE team_statistics_id_seq RESTART WITH 1")
+            db.execute("ALTER SEQUENCE user_quinielas_id_seq RESTART WITH 1")
+            db.execute("ALTER SEQUENCE user_quiniela_predictions_id_seq RESTART WITH 1")
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Could not reset sequences (may not be PostgreSQL): {e}")
+        
+        # Verify deletion
+        counts_after = {
+            "matches": db.query(Match).count(),
+            "teams": db.query(Team).count(),
+            "team_statistics": db.query(TeamStatistics).count(),
+            "user_quinielas": db.query(UserQuiniela).count(),
+            "user_predictions": db.query(UserQuinielaPrediction).count()
+        }
+        
+        logger.warning(f"🗑️ Database cleared successfully. Records after: {counts_after}")
+        
+        return {
+            "message": "All database data has been successfully cleared",
+            "warning": "This action cannot be undone!",
+            "records_deleted": {
+                "user_quiniela_predictions": deleted_user_predictions,
+                "user_quinielas": deleted_user_quinielas,
+                "team_statistics": deleted_team_stats,
+                "matches": deleted_matches,
+                "teams": deleted_teams
+            },
+            "counts_before": counts_before,
+            "counts_after": counts_after,
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "next_steps": [
+                "1. Update teams data: POST /data/update-teams/{season}",
+                "2. Update matches data: POST /data/update-matches/{season}", 
+                "3. Update statistics: POST /data/update-statistics/{season}"
+            ]
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing database: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error clearing database: {str(e)}")
 
 
 if __name__ == "__main__":

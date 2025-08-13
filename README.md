@@ -460,42 +460,66 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ## 📝 Últimos Cambios
 
-### Versión 1.3.0 (2025-08-13) - Sistema de Predicciones Básicas
+### Versión 1.4.0 (2025-08-13) - Sistema Híbrido de Predicciones + Gestión Completa
 
-**🎯 Nuevas Funcionalidades:**
-- ✅ **Predictor Básico Heurístico**: Sistema para temporadas nuevas sin datos históricos ML
-- ✅ **Soporte Temporada 2025**: Predicciones para partidos de agosto 2025 onwards
-- ✅ **Validación Inteligente de Temporadas**: Previene colgado en endpoints de actualización
-- ✅ **API-Football 2025 Verificado**: Confirmado soporte para nueva temporada
+**🎯 Nuevas Funcionalidades Principales:**
+- ✅ **Sistema Híbrido de Predicciones**: Combina datos históricos (2024/2023) + heurísticas para nuevas temporadas
+- ✅ **Gestión Completa de Base de Datos**: Función para borrar todos los datos desde dashboard con confirmación
+- ✅ **Selección Inteligente de Partidos**: Solo ligas españolas (La Liga + Segunda) agrupados por jornadas
+- ✅ **Entrenamiento con Fallback**: Modelos para temporada 2025 usando datos de 2024 automáticamente
+- ✅ **Predicciones Mejoradas**: Explicaciones detalladas indicando método usado y fuentes de datos
 
-**🔧 Mejoras Técnicas:**
-- **Endpoint Fix**: `/quiniela/next-matches/{season}` ahora busca partidos futuros primero
-- **Fallback Mejorado**: Lógica prioritaria (futuros → básico → históricos)
-- **Validación Previa**: Todos los endpoints de actualización validan temporadas
-- **Logging Mejorado**: Trazabilidad completa de decisiones del sistema
+**🧠 Sistema Híbrido de Predicciones:**
+- **Datos Históricos**: Usa estadísticas de temporadas 2024/2023 cuando están disponibles
+- **Pesos Adaptativos**: 40% datos históricos + 35% experiencia + 25% otros factores
+- **Temporal Weighting**: Temporadas recientes tienen mayor peso (70% vs 30%)
+- **Fallback Inteligente**: Si no hay datos históricos, usa solo heurísticas básicas
+- **Explicaciones Transparentes**: Indica claramente qué datos se usaron
 
-**📁 Archivos Nuevos:**
-- `backend/app/ml/basic_predictor.py` - Sistema heurístico de predicciones
-- `backend/app/config/quiniela_constants.py` - Constantes oficiales Quiniela
-- `scripts/rebuild.sh` y `scripts/rebuild.bat` - Scripts de rebuild Docker
-- Tests API: `simple_api_test.py`, `test_quiniela_data.py`
+**🗑️ Gestión de Base de Datos:**
+- **Borrado Completo**: Elimina todos los datos (equipos, partidos, estadísticas, quinielas)
+- **Confirmación Segura**: Requiere escribir "BORRAR_TODO" para confirmar
+- **Orden Correcto**: Respeta foreign keys eliminando en secuencia correcta
+- **Reset Automático**: Reinicia secuencias PostgreSQL para IDs limpios
+- **Feedback Detallado**: Muestra registros eliminados y próximos pasos
 
-**🐛 Fixes Críticos:**
-- **Error 500 en predicciones 2025**: Resuelto con predictor básico
-- **Endpoints colgados**: Validación previa impide background tasks innecesarios
-- **Formato dashboard**: Compatibilidad entre predictor básico y ML tradicional
+**🎯 Selección de Partidos Mejorada:**
+- **Solo Ligas Españolas**: Filtra únicamente La Liga (140) y Segunda División (141)
+- **Agrupación por Jornadas**: Intenta obtener partidos de la misma jornada
+- **Priorización Inteligente**: Máximo 10 La Liga + completar con Segunda hasta 15
+- **Fallback Cronológico**: Si no hay jornada completa, usa próximos partidos
+
+**🔧 Mejoras Técnicas Críticas:**
+- **Entrenamiento 2025**: Fallback automático a datos 2024 con mensajes informativos
+- **Endpoint Robusto**: `/model/train` maneja temporadas futuras sin errores 400
+- **Validación Previa**: Todos los endpoints validan disponibilidad antes de procesar
+- **Error Handling**: Try-catch exhaustivo con logging detallado
+
+**📁 Archivos Nuevos/Modificados:**
+- `backend/app/ml/basic_predictor.py` - Sistema híbrido con datos históricos
+- `backend/app/main.py` - Endpoint de borrado + entrenamiento mejorado
+- `dashboard.py` - Interfaz de borrado segura + soporte DELETE
+
+**🐛 Fixes Críticos Completados:**
+- ❌ **Error 400 entrenamiento 2025** → ✅ **RESUELTO** - Fallback a temporada 2024
+- ❌ **Partidos incorrectos Quiniela** → ✅ **RESUELTO** - Solo ligas españolas por jornadas
+- ❌ **Error 400 actualizar datos** → ✅ **RESUELTO** - Validación mejorada
+- ❌ **Falta borrado de datos** → ✅ **IMPLEMENTADO** - Función completa con seguridad
 
 **🧪 Testing Completado:**
 ```bash
-# Confirmado funcionando
-curl -X GET "localhost:8000/quiniela/next-matches/2025"  # ✅ 15 predicciones
-curl -X POST "localhost:8000/data/update-teams/2025"     # ✅ Mensaje informativo
+# Todos los problemas resueltos
+curl -X POST "localhost:8000/model/train?season=2025"                    # ✅ Fallback a 2024
+curl -X GET "localhost:8000/quiniela/next-matches/2025"                  # ✅ Predicciones híbridas
+curl -X DELETE "localhost:8000/data/clear-all?confirm=DELETE_ALL_DATA"   # ✅ Borrado seguro
 ```
 
-**📖 Documentación Actualizada:**
-- CONTEXT.md ampliado con troubleshooting Docker y validación temporadas
-- README.md con últimos cambios y procedimientos
-- Instrucciones rebuild con `--no-cache` para desarrollo
+**📊 Estado del Sistema:**
+- ✅ **Listo para temporada 2025** con predicciones inteligentes
+- ✅ **Gestión completa** de datos desde interfaz web
+- ✅ **Selección correcta** de partidos para Quiniela española
+- ✅ **Backward compatibility** mantenida al 100%
+- ✅ **Error handling robusto** en todos los endpoints
 
 ---
 

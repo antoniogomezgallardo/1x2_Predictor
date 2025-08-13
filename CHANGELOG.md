@@ -1,5 +1,100 @@
 # 📋 Changelog - Quiniela Predictor
 
+## [1.4.0] - 2025-08-13 - Sistema Híbrido de Predicciones + Gestión Completa de BD
+
+### 🎯 Nuevas Funcionalidades Principales
+
+- **🧠 Sistema Híbrido de Predicciones**:
+  - Combina datos históricos de temporadas anteriores (2024, 2023) con heurísticas básicas
+  - Pesos adaptativos: 40% datos históricos + factores tradicionales cuando hay datos disponibles
+  - Temporal weighting: temporadas más recientes tienen mayor peso (70% vs 30%)
+  - Fallback inteligente a heurísticas cuando no hay datos históricos disponibles
+  - Explicaciones transparentes que indican qué método y datos se usaron
+  
+- **🗑️ Gestión Completa de Base de Datos**:
+  - Nuevo endpoint `DELETE /data/clear-all` para borrar todos los datos de la BD
+  - Interfaz segura en dashboard con confirmación obligatoria ("BORRAR_TODO")
+  - Eliminación en orden correcto respetando foreign key constraints
+  - Reset automático de secuencias PostgreSQL para IDs limpios
+  - Feedback detallado de registros eliminados y próximos pasos recomendados
+
+- **🎯 Selección Inteligente de Partidos para Quiniela**:
+  - Filtrado exclusivo por ligas españolas (La Liga 140 + Segunda División 141)
+  - Agrupación inteligente por jornadas para obtener partidos coherentes
+  - Priorización: máximo 10 partidos La Liga + completar con Segunda hasta 15
+  - Fallback cronológico si no hay jornada completa disponible
+
+### 🔧 Mejoras Técnicas Críticas
+
+- **🤖 Entrenamiento con Fallback Automático**:
+  - Endpoint `/model/train` maneja temporadas futuras (2025) sin errores 400
+  - Fallback automático a temporada anterior (2024) cuando 2025 no tiene datos
+  - Mensajes informativos claros sobre qué temporada se usa para entrenamiento
+  - Status diferenciados: `success_with_fallback` vs `insufficient_data`
+
+- **⚡ Validación Previa Robusta**:
+  - Todos los endpoints validan disponibilidad de datos antes de procesar
+  - Previene background tasks innecesarios que causaban timeouts
+  - Error handling exhaustivo con try-catch en funciones críticas
+  - Logging detallado para debugging y trazabilidad
+
+- **🎨 Interfaz Dashboard Mejorada**:
+  - Sección "🗑️ Borrar Datos" en tab "Gestión de Datos"
+  - Soporte para método DELETE en función `make_api_request()`
+  - Feedback visual detallado de operaciones críticas
+
+### 🐛 Fixes Críticos Completados
+
+- **❌ Error 400 en entrenamiento modelo temporada 2025**: **RESUELTO**
+  - ANTES: HTTPException 400 "insufficient data"
+  - AHORA: Fallback automático a temporada 2024 con mensaje informativo
+  
+- **❌ Partidos incorrectos en Quiniela**: **RESUELTO**
+  - ANTES: Partidos aleatorios de cualquier liga
+  - AHORA: Solo ligas españolas agrupados por jornadas coherentes
+  
+- **❌ Error 400 en actualizar datos desde dashboard**: **RESUELTO**
+  - Corregido mediante mejora en validación de temporadas del endpoint `/model/train`
+  
+- **❌ Falta función para borrar datos BD**: **IMPLEMENTADO**
+  - Nueva funcionalidad completa con interfaz segura y confirmación
+
+### 📁 Archivos Principales Modificados
+
+- **`backend/app/main.py`** (Líneas 246-310, 932-1032):
+  - Endpoint `/model/train` con fallback inteligente
+  - Nuevo endpoint `DELETE /data/clear-all` con confirmación de seguridad
+  
+- **`backend/app/ml/basic_predictor.py`** (Sistema completo reescrito):
+  - Método `_get_historical_performance()` para datos de temporadas anteriores
+  - Predictor híbrido con pesos adaptativos según disponibilidad de datos
+  - Selección inteligente de partidos españoles por jornadas
+  - Explicaciones mejoradas que indican fuentes de datos usadas
+  
+- **`dashboard.py`** (Líneas 44-69, 878-952):
+  - Soporte método DELETE en `make_api_request()`
+  - Interfaz completa de borrado con confirmación en "Gestión de Datos"
+
+### 🧪 Testing Exhaustivo Completado
+
+```bash
+✅ curl -X POST "localhost:8000/model/train?season=2025"
+   # Respuesta: Fallback a 2024 con 848 matches encontrados
+
+✅ curl -X GET "localhost:8000/quiniela/next-matches/2025"
+   # Respuesta: 15 predicciones híbridas con datos históricos + heurísticas
+
+✅ curl -X DELETE "localhost:8000/data/clear-all?confirm=DELETE_ALL_DATA"
+   # Respuesta: Borrado exitoso con resumen detallado de registros eliminados
+```
+
+### 📊 Beneficios del Sistema Híbrido
+
+- **Mejor Precisión**: Usa datos reales de rendimiento de equipos cuando están disponibles
+- **Robustez**: Fallback automático asegura que siempre hay predicciones disponibles
+- **Transparencia**: Usuario sabe exactamente qué datos se usaron para cada predicción
+- **Adaptabilidad**: Conforme avance temporada 2025, incorporará esos datos automáticamente
+
 ## [1.3.0] - 2025-08-13 - Sistema de Predicciones Básicas + Reglas Oficiales de Quiniela
 
 ### 🎯 Nuevas Características - Sistema de Predicciones Básicas

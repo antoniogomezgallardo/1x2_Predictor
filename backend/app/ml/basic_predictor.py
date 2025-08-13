@@ -4,7 +4,7 @@ Utiliza heurísticas simples basadas en datos disponibles de equipos
 """
 from typing import List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from ..database.models import Team, Match
+from ..database.models import Team, Match, TeamStatistics
 import random
 from datetime import datetime
 import logging
@@ -17,37 +17,65 @@ class BasicPredictor:
     def __init__(self, db: Session):
         self.db = db
         
-    def predict_match(self, home_team: Team, away_team: Team) -> Dict[str, Any]:
+    def predict_match(self, home_team: Team, away_team: Team, use_historical: bool = True) -> Dict[str, Any]:
         """
-        Predice resultado de un partido usando heurísticas básicas
+        Predice resultado de un partido usando heurísticas básicas + datos históricos
         """
         # Calcular ventaja local básica
         home_advantage = 0.15  # 15% ventaja por jugar en casa
         
-        # Heurística 1: Antiguedad del club (más antiguo = más experiencia)
+        # Heurística 1: Rendimiento histórico (si está disponible)
+        if use_historical:
+            home_historical = self._get_historical_performance(home_team)
+            away_historical = self._get_historical_performance(away_team)
+        else:
+            home_historical = 0.5
+            away_historical = 0.5
+        
+        # Heurística 2: Antiguedad del club (más antiguo = más experiencia)
         home_experience = self._calculate_experience_score(home_team)
         away_experience = self._calculate_experience_score(away_team)
         
-        # Heurística 2: Capacidad del estadio (mayor capacidad = más apoyo)
+        # Heurística 3: Capacidad del estadio (mayor capacidad = más apoyo)
         home_stadium_factor = self._calculate_stadium_factor(home_team)
         away_stadium_factor = self._calculate_stadium_factor(away_team)
         
-        # Heurística 3: Liga del equipo (La Liga vs Segunda)
+        # Heurística 4: Liga del equipo (La Liga vs Segunda)
         home_league_factor = self._calculate_league_factor(home_team)
         away_league_factor = self._calculate_league_factor(away_team)
         
+        # Pesos adaptables según disponibilidad de datos históricos
+        if use_historical and (home_historical != 0.5 or away_historical != 0.5):
+            # Con datos históricos: mayor peso a rendimiento pasado
+            weights = {
+                'historical': 0.4,
+                'experience': 0.2,
+                'stadium': 0.15,
+                'league': 0.25
+            }
+        else:
+            # Sin datos históricos: distribuir pesos entre otros factores
+            weights = {
+                'historical': 0.0,
+                'experience': 0.35,
+                'stadium': 0.25,
+                'league': 0.4
+            }
+        
         # Calcular puntuación base para cada equipo
         home_score = (
-            home_experience * 0.3 +
-            home_stadium_factor * 0.2 +
-            home_league_factor * 0.3 +
-            home_advantage * 0.2
+            home_historical * weights['historical'] +
+            home_experience * weights['experience'] +
+            home_stadium_factor * weights['stadium'] +
+            home_league_factor * weights['league'] +
+            home_advantage * 0.15  # Ventaja local siempre presente
         )
         
         away_score = (
-            away_experience * 0.3 +
-            away_stadium_factor * 0.2 +
-            away_league_factor * 0.3
+            away_historical * weights['historical'] +
+            away_experience * weights['experience'] +
+            away_stadium_factor * weights['stadium'] +
+            away_league_factor * weights['league']
         )
         
         # Normalizar puntuaciones
@@ -97,7 +125,7 @@ class BasicPredictor:
         # Generar explicación
         explanation = self._generate_explanation(
             home_team, away_team, prediction, 
-            home_prob, draw_prob, away_prob
+            home_prob, draw_prob, away_prob, use_historical, weights
         )
         
         return {
@@ -156,9 +184,55 @@ class BasicPredictor:
         else:
             return 0.5  # Valor neutral para otras ligas
     
+    def _get_historical_performance(self, team: Team) -> float:
+        """
+        Obtiene rendimiento histórico del equipo basado en temporadas anteriores
+        Devuelve puntuación normalizada entre 0.0 y 1.0
+        """
+        try:
+            current_year = datetime.now().year
+            historical_seasons = [current_year - 1, current_year - 2]  # 2024, 2023
+            
+            total_performance = 0.0
+            seasons_found = 0
+            
+            for season in historical_seasons:
+                # Buscar estadísticas del equipo en esa temporada
+                stats = self.db.query(TeamStatistics).filter(
+                    TeamStatistics.team_id == team.id,
+                    TeamStatistics.season == season
+                ).first()
+                
+                if stats and stats.matches_played > 0:
+                    # Calcular rendimiento normalizado
+                    # Máximo teórico: 3 puntos por partido
+                    points_per_game = stats.points / stats.matches_played
+                    performance_score = min(points_per_game / 3.0, 1.0)  # Normalizar a [0,1]
+                    
+                    # Pesar temporadas más recientes
+                    weight = 0.7 if season == current_year - 1 else 0.3
+                    total_performance += performance_score * weight
+                    seasons_found += weight
+                    
+                    logger.debug(f"Team {team.name} season {season}: {stats.points} pts in {stats.matches_played} matches = {performance_score:.3f}")
+            
+            if seasons_found > 0:
+                normalized_performance = total_performance / seasons_found
+                logger.debug(f"Team {team.name} historical performance: {normalized_performance:.3f}")
+                return normalized_performance
+            else:
+                # No hay datos históricos disponibles
+                logger.debug(f"Team {team.name}: No historical data found")
+                return 0.5  # Valor neutral
+                
+        except Exception as e:
+            logger.warning(f"Error getting historical performance for {team.name}: {e}")
+            return 0.5  # Valor neutral en caso de error
+    
     def _generate_explanation(self, home_team: Team, away_team: Team, 
                             prediction: str, home_prob: float, 
-                            draw_prob: float, away_prob: float) -> str:
+                            draw_prob: float, away_prob: float, 
+                            use_historical: bool = True, weights: dict = None) -> str:
         """Genera explicación legible de la predicción"""
         
         pred_map = {"1": "Victoria local", "X": "Empate", "2": "Victoria visitante"}
@@ -168,6 +242,10 @@ class BasicPredictor:
         
         # Analizar factores clave
         factors = []
+        
+        # Información sobre datos históricos
+        if use_historical and weights and weights.get('historical', 0) > 0:
+            factors.append(f"📊 Análisis incluye datos de temporadas anteriores (peso: {weights['historical']:.0%})")
         
         # Factor liga
         if home_team.league_id == 140 and away_team.league_id == 141:
@@ -192,36 +270,87 @@ class BasicPredictor:
         
         if factors:
             explanation += "**Factores clave:**\n"
-            for factor in factors[:3]:  # Máximo 3 factores
+            for factor in factors[:4]:  # Máximo 4 factores
                 explanation += f"• {factor}\n"
         
-        explanation += f"\n*Predicción basada en heurísticas básicas (datos históricos, capacidad estadio, liga)*"
+        # Descripción del método usado
+        method_desc = "datos históricos + heurísticas" if (use_historical and weights and weights.get('historical', 0) > 0) else "heurísticas básicas"
+        explanation += f"\n*Predicción basada en {method_desc} (experiencia, capacidad estadio, liga, rendimiento)*"
         
         return explanation
 
 def create_basic_predictions_for_quiniela(db: Session, season: int) -> List[Dict[str, Any]]:
     """
     Crea predicciones básicas para una Quiniela completa (14-15 partidos)
+    Selecciona partidos de las ligas españolas (La Liga + Segunda División)
     """
     predictor = BasicPredictor(db)
     predictions = []
     
     try:
-        # Buscar próximos partidos sin resultado
+        # Definir ligas españolas para Quiniela
+        SPANISH_LEAGUES = [140, 141]  # La Liga, Segunda División
+        
+        # Buscar próximos partidos sin resultado de las ligas españolas
         upcoming_matches = db.query(Match).filter(
             Match.season == season,
+            Match.league_id.in_(SPANISH_LEAGUES),  # Solo ligas españolas
             Match.result.is_(None),  # Sin resultado aún
             Match.home_goals.is_(None)  # Sin goles registrados
-        ).order_by(Match.match_date).limit(20).all()  # Obtener 20 para seleccionar los mejores 15
+        ).order_by(Match.match_date, Match.league_id.desc()).all()  # Ordenar por fecha, La Liga primero
         
-        logger.info(f"Found {len(upcoming_matches)} upcoming matches for season {season}")
+        logger.info(f"Found {len(upcoming_matches)} upcoming Spanish league matches for season {season}")
         
         if len(upcoming_matches) < 14:
-            logger.warning(f"Only {len(upcoming_matches)} upcoming matches found, need at least 14 for Quiniela")
+            logger.warning(f"Only {len(upcoming_matches)} upcoming Spanish matches found, need at least 14 for Quiniela")
             return []
         
-        # Seleccionar los primeros 15 partidos más próximos
-        selected_matches = upcoming_matches[:15]
+        # Estrategia de selección inteligente para Quiniela:
+        # 1. Intentar obtener partidos de la misma jornada
+        # 2. Priorizar La Liga (140) sobre Segunda División (141)
+        # 3. Seleccionar hasta 15 partidos
+        
+        selected_matches = []
+        
+        # Agrupar por jornadas y fechas cercanas
+        from collections import defaultdict
+        matches_by_round = defaultdict(list)
+        
+        for match in upcoming_matches:
+            # Agrupar por jornada si está disponible, sino por fecha
+            group_key = match.round if match.round else match.match_date.strftime('%Y-%m-%d')
+            matches_by_round[group_key].append(match)
+        
+        # Buscar la jornada con más partidos disponibles
+        best_round = None
+        best_count = 0
+        
+        for round_key, round_matches in matches_by_round.items():
+            # Filtrar solo partidos de ligas españolas
+            spanish_matches = [m for m in round_matches if m.league_id in SPANISH_LEAGUES]
+            
+            if len(spanish_matches) > best_count:
+                best_count = len(spanish_matches)
+                best_round = round_key
+        
+        logger.info(f"Best round found: {best_round} with {best_count} Spanish matches")
+        
+        if best_round and best_count >= 10:
+            # Usar partidos de la mejor jornada
+            round_matches = matches_by_round[best_round]
+            # Priorizar La Liga sobre Segunda División
+            la_liga_matches = [m for m in round_matches if m.league_id == 140]
+            segunda_matches = [m for m in round_matches if m.league_id == 141]
+            
+            # Combinar: máximo 10 de La Liga + completar con Segunda hasta 15
+            selected_matches = la_liga_matches[:10] + segunda_matches[:5]
+            selected_matches = selected_matches[:15]  # Máximo 15
+            
+            logger.info(f"Selected {len(selected_matches)} matches from round {best_round}: {len([m for m in selected_matches if m.league_id == 140])} La Liga + {len([m for m in selected_matches if m.league_id == 141])} Segunda")
+        else:
+            # Fallback: seleccionar los primeros 15 partidos más próximos
+            selected_matches = upcoming_matches[:15]
+            logger.info(f"Fallback: Selected first 15 upcoming matches")
         
         for match in selected_matches:
             # Obtener equipos
