@@ -8,13 +8,15 @@ Predecir los resultados de los 15 partidos semanales de la Quiniela Española (P
 
 ## ⚡ Características Principales
 
-- **Predicciones ML**: Modelos ensemble (Random Forest + XGBoost) con +40 características
-- **Dashboard Interactivo**: Visualización en tiempo real de predicciones y rendimiento
-- **Gestión Personal de Quinielas**: Sistema completo para crear, guardar y trackear tus quinielas
-- **Explicaciones Detalladas**: Cada predicción incluye análisis razonado y factores decisivos
-- **Análisis Financiero**: Seguimiento de ROI, beneficios y estrategias de apuestas
-- **Gestión de Datos**: Integración automática con API-Football
-- **Historial Completo**: Tracking de precisión y rendimiento por jornada
+- **🤖 Predicciones ML**: Modelos ensemble (Random Forest + XGBoost) con +40 características
+- **📊 Dashboard Interactivo**: Visualización en tiempo real de predicciones y rendimiento
+- **🎯 Gestión Personal de Quinielas**: Sistema completo para crear, guardar y trackear tus quinielas
+- **💡 Explicaciones Detalladas**: Cada predicción incluye análisis razonado y factores decisivos
+- **💰 Análisis Financiero**: Seguimiento de ROI, beneficios y estrategias de apuestas
+- **🔄 Gestión de Datos**: Integración automática con API-Football
+- **📈 Historial Completo**: Tracking de precisión y rendimiento por jornada
+- **🗓️ Soporte Multi-Temporada**: Compatible con temporadas 2023-2025, fallback automático
+- **🚀 Setup Ultra-Rápido**: Configuración completa en 5 minutos con scripts automatizados
 
 ## 🏗️ Arquitectura
 
@@ -53,13 +55,50 @@ Predecir los resultados de los 15 partidos semanales de la Quiniela Española (P
 
 ## 🚀 Instalación y Configuración
 
-### Prerrequisitos
+### ⚡ Inicio Rápido (Recomendado)
+
+**Solo necesitas Docker y 5 minutos:**
+
+```bash
+# 1. Clonar repositorio
+git clone <repository-url>
+cd 1x2_Predictor
+
+# 2. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tu API_FOOTBALL_KEY y SECRET_KEY
+
+# 3. ¡Iniciar todo automáticamente!
+python scripts/quick_start.py
+```
+
+El script automático:
+- ✅ Verifica prerrequisitos
+- ✅ Inicia todos los servicios con Docker
+- ✅ Configura la base de datos
+- ✅ Carga datos iniciales (opcional)
+- ✅ Verifica que todo funcione
+
+**Accede inmediatamente a:**
+- Dashboard: http://localhost:8501
+- API: http://localhost:8000/docs
+
+### 📋 Prerrequisitos
+- [Docker Desktop](https://docs.docker.com/get-docker/) (incluye Docker Compose)
+- Cuenta [API-Football Premium](https://dashboard.api-football.com/) 
+- Editor de texto para configurar `.env`
+
+### 🔧 Instalación Manual (Avanzado)
+
+<details>
+<summary>Clic para expandir instrucciones manuales</summary>
+
+#### Prerrequisitos Adicionales
 - Python 3.11+
 - PostgreSQL 13+
 - Redis 6+
-- Cuenta API-Football (Premium)
 
-### Instalación Local
+#### Instalación Local
 
 1. **Clonar repositorio**:
 ```bash
@@ -67,7 +106,7 @@ git clone <repository-url>
 cd 1x2_Predictor
 ```
 
-2. **Configurar entorno**:
+2. **Configurar entorno Python**:
 ```bash
 # Crear entorno virtual
 python -m venv venv
@@ -82,7 +121,7 @@ pip install -r requirements.txt
 3. **Configurar variables de entorno**:
 ```bash
 cp .env.example .env
-# Editar .env con tus credenciales
+# Editar .env con tus credenciales (ver sección Configuración)
 ```
 
 4. **Configurar base de datos**:
@@ -90,26 +129,69 @@ cp .env.example .env
 # Crear base de datos PostgreSQL
 createdb quiniela_predictor
 
-# Ejecutar migraciones
+# Ejecutar configuración
 python scripts/setup_database.py
 ```
 
-### Instalación con Docker
-
-1. **Configurar variables de entorno**:
+5. **Iniciar servicios manualmente**:
 ```bash
+# Terminal 1: API Backend
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2: Dashboard
+streamlit run dashboard.py --server.port=8501 --server.address=0.0.0.0
+
+# Terminal 3: Redis (si no usas Docker)
+redis-server
+```
+
+#### Instalación con Docker
+
+```bash
+# 1. Configurar variables de entorno
 cp .env.example .env
 # Editar .env con API_FOOTBALL_KEY y SECRET_KEY
-```
 
-2. **Ejecutar con Docker Compose**:
-```bash
+# 2. Ejecutar con Docker Compose
 docker-compose up -d
+
+# 3. Configurar base de datos
+python scripts/setup_database.py
 ```
 
-3. **Configurar base de datos**:
+</details>
+
+### ⚙️ Configuración de Variables de Entorno
+
+El archivo `.env` contiene toda la configuración. **Variables críticas:**
+
 ```bash
-docker-compose exec api python scripts/setup_database.py
+# REQUERIDO: Tu API key de API-Football
+API_FOOTBALL_KEY=tu_api_key_aqui
+
+# REQUERIDO: Clave secreta (genera con: openssl rand -hex 32)
+SECRET_KEY=tu_secret_key_muy_seguro_de_32_caracteres_minimo
+
+# Base de datos (si usas Docker, no cambies esto)
+DATABASE_URL=postgresql://quiniela_user:quiniela_password@localhost:5432/quiniela_predictor
+
+# Configuración de apuestas
+INITIAL_BANKROLL=1000.0      # Tu bankroll inicial en euros
+MAX_BET_PERCENTAGE=0.05      # Máximo 5% del bankroll por jornada
+MIN_CONFIDENCE_THRESHOLD=0.6 # Solo apostar con 60%+ confianza
+```
+
+### 🩺 Verificar Instalación
+
+```bash
+# Verificar que todo está configurado correctamente
+python scripts/validate_environment.py
+
+# Comprobar API
+curl http://localhost:8000/health
+
+# Comprobar Dashboard
+open http://localhost:8501
 ```
 
 ## 🎮 Uso del Sistema
@@ -118,13 +200,13 @@ docker-compose exec api python scripts/setup_database.py
 
 ```bash
 # Actualizar equipos para temporada actual
-curl -X POST "http://localhost:8000/data/update-teams/2024"
+curl -X POST "http://localhost:8000/data/update-teams/2025"
 
 # Actualizar partidos
-curl -X POST "http://localhost:8000/data/update-matches/2024"
+curl -X POST "http://localhost:8000/data/update-matches/2025"
 
 # Actualizar estadísticas
-curl -X POST "http://localhost:8000/data/update-statistics/2024"
+curl -X POST "http://localhost:8000/data/update-statistics/2025"
 ```
 
 ### 2. Entrenamiento del Modelo
@@ -133,20 +215,20 @@ curl -X POST "http://localhost:8000/data/update-statistics/2024"
 # Entrenar modelo con datos históricos
 curl -X POST "http://localhost:8000/model/train" \
      -H "Content-Type: application/json" \
-     -d '{"season": 2024}'
+     -d '{"season": 2025}'
 
 # O usar script directo
-python scripts/train_model.py --season 2024
+python scripts/train_model.py --season 2025
 ```
 
 ### 3. Generar Predicciones
 
 ```bash
 # Predicciones automáticas para la jornada actual
-python scripts/run_predictions.py --season 2024
+python scripts/run_predictions.py --season 2025
 
-# Predicciones para jornada específica
-python scripts/run_predictions.py --season 2024 --week 15
+# Predicciones para jornada específica  
+python scripts/run_predictions.py --season 2025 --week 15
 ```
 
 ### 4. Dashboard

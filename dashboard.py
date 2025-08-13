@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 
 # Configuration
@@ -41,36 +41,59 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def make_api_request(endpoint: str, params: dict = None, method: str = "GET"):
+def make_api_request(endpoint: str, params: dict = None, method: str = "GET", show_debug: bool = False):
     """Make request to API"""
     try:
+        url = f"{API_BASE_URL}{endpoint}"
+        if show_debug:
+            st.write(f"🔧 DEBUG: Making {method} request to: {url}")
+        
         if method == "POST":
-            response = requests.post(f"{API_BASE_URL}{endpoint}", json=params)
+            response = requests.post(url, json=params, timeout=30)
         else:
-            response = requests.get(f"{API_BASE_URL}{endpoint}", params=params)
+            response = requests.get(url, params=params, timeout=30)
+        
+        if show_debug:
+            st.write(f"🔧 DEBUG: Response status: {response.status_code}")
         response.raise_for_status()
-        return response.json()
+        result = response.json()
+        if show_debug:
+            st.write(f"🔧 DEBUG: Response data: {result}")
+        return result
     except requests.exceptions.RequestException as e:
         st.error(f"Error connecting to API: {str(e)}")
+        if show_debug:
+            st.write(f"🔧 DEBUG: Full error: {e}")
         return None
 
 
 def display_prediction_card(prediction):
     """Display a prediction card"""
-    result_class = f"result-{prediction['predicted_result']}"
+    # Usar 'prediction' en lugar de 'predicted_result'
+    predicted_result = prediction.get('prediction', prediction.get('predicted_result', 'X'))
+    result_class = f"result-{predicted_result}"
     
-    confidence_color = "green" if prediction['confidence'] > 0.7 else "orange" if prediction['confidence'] > 0.5 else "red"
+    # Manejo seguro de confianza
+    confidence = prediction.get('confidence', 0.5)
+    confidence_color = "green" if confidence > 0.7 else "orange" if confidence > 0.5 else "red"
+    
+    # Manejo seguro de probabilidades
+    probabilities = prediction.get('probabilities', {})
+    home_win = probabilities.get('home_win', 0.33)
+    draw = probabilities.get('draw', 0.33)
+    away_win = probabilities.get('away_win', 0.33)
     
     st.markdown(f"""
     <div class="prediction-card {result_class}">
-        <h4>Partido {prediction['match_number']}: {prediction['home_team']} vs {prediction['away_team']}</h4>
-        <p><strong>Predicción:</strong> {prediction['predicted_result']} 
-           <span style="color: {confidence_color}">({prediction['confidence']:.1%} confianza)</span></p>
+        <h4>Partido {prediction.get('match_number', '?')}: {prediction.get('home_team', '?')} vs {prediction.get('away_team', '?')}</h4>
+        <p><strong>Predicción:</strong> {predicted_result} 
+           <span style="color: {confidence_color}">({confidence:.1%} confianza)</span></p>
         <div style="display: flex; justify-content: space-between;">
-            <span>Local: {prediction['probabilities']['home_win']:.1%}</span>
-            <span>Empate: {prediction['probabilities']['draw']:.1%}</span>
-            <span>Visitante: {prediction['probabilities']['away_win']:.1%}</span>
+            <span>Local: {home_win:.1%}</span>
+            <span>Empate: {draw:.1%}</span>
+            <span>Visitante: {away_win:.1%}</span>
         </div>
+        <small>Fecha: {prediction.get('match_date', 'N/A')}</small>
     </div>
     """, unsafe_allow_html=True)
 
@@ -81,7 +104,7 @@ def main():
     
     # Sidebar
     st.sidebar.title("Configuración")
-    current_season = st.sidebar.selectbox("Temporada", [2024, 2023, 2022], index=0)
+    current_season = st.sidebar.selectbox("Temporada", [2025, 2024, 2023], index=0)
     
     # Main navigation
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -133,6 +156,10 @@ def main():
                 
                 st.subheader(f"Predicciones para {len(predictions['matches'])} Partidos")
                 st.write(f"**Modelo:** {predictions.get('model_version', 'N/A')} | **Generado:** {predictions.get('generated_at', 'N/A')}")
+                
+                # Mostrar nota si se usan datos de temporada anterior
+                if predictions.get('note'):
+                    st.info(f"ℹ️ {predictions['note']}")
                 
                 # Formulario para crear quiniela personal
                 with st.form("quiniela_form"):
@@ -448,18 +475,24 @@ def main():
         # Get current predictions
         predictions_data = make_api_request("/predictions/current-week", {"season": current_season})
         
-        if predictions_data:
+        if predictions_data and predictions_data.get('predictions'):
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 st.metric("Temporada", predictions_data['season'])
             
             with col2:
-                st.metric("Jornada", predictions_data['week_number'])
+                week_num = predictions_data.get('week_number') or 'N/A'
+                st.metric("Jornada", week_num)
             
             with col3:
-                avg_confidence = sum(p['confidence'] for p in predictions_data['predictions']) / len(predictions_data['predictions'])
-                st.metric("Confianza Media", f"{avg_confidence:.1%}")
+                # Calcular confianza media de forma segura
+                predictions = predictions_data['predictions']
+                if predictions and len(predictions) > 0:
+                    avg_confidence = sum(p.get('confidence', 0.5) for p in predictions) / len(predictions)
+                    st.metric("Confianza Media", f"{avg_confidence:.1%}")
+                else:
+                    st.metric("Confianza Media", "N/A")
             
             with col4:
                 st.metric("Versión Modelo", predictions_data.get('model_version', 'N/A'))
@@ -470,25 +503,47 @@ def main():
             for prediction in predictions_data['predictions']:
                 display_prediction_card(prediction)
             
-            # Betting strategy
-            st.subheader("Estrategia de Apuestas Recomendada")
-            betting = predictions_data['betting_strategy']
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total a Apostar", f"€{betting['total_stake']:.2f}")
-            with col2:
-                st.metric("Número de Apuestas", betting['number_of_bets'])
-            with col3:
-                st.metric("% del Bankroll", f"{betting['percentage_of_bankroll']:.1f}%")
-            
-            if betting['recommended_bets']:
-                st.subheader("Apuestas Recomendadas")
-                bet_df = pd.DataFrame(betting['recommended_bets'])
-                st.dataframe(bet_df[['match_number', 'home_team', 'away_team', 'predicted_result', 'confidence', 'recommended_bet']])
+            # Betting strategy (si existe)
+            if 'betting_strategy' in predictions_data and predictions_data['betting_strategy']:
+                st.subheader("Estrategia de Apuestas Recomendada")
+                betting = predictions_data['betting_strategy']
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total a Apostar", f"€{betting.get('total_stake', 0):.2f}")
+                with col2:
+                    st.metric("Número de Apuestas", betting.get('number_of_bets', 0))
+                with col3:
+                    st.metric("% del Bankroll", f"{betting.get('percentage_of_bankroll', 0):.1f}%")
+                
+                if betting.get('recommended_bets'):
+                    st.subheader("Apuestas Recomendadas")
+                    bet_df = pd.DataFrame(betting['recommended_bets'])
+                    st.dataframe(bet_df[['match_number', 'home_team', 'away_team', 'predicted_result', 'confidence', 'recommended_bet']])
+            else:
+                st.info("💡 Estrategia de apuestas disponible cuando el modelo esté entrenado")
         
         else:
-            st.warning("No se pudieron obtener las predicciones. Verifica que el modelo esté entrenado.")
+            # Manejar casos donde no hay predicciones
+            if predictions_data:
+                if predictions_data.get('model_trained') == False:
+                    st.info("🤖 **Modelo no entrenado**")
+                    st.write("Para ver predicciones, primero necesitas entrenar el modelo:")
+                    st.write("1. Ve a la pestaña '🤖 Modelo ML'")
+                    st.write("2. Haz clic en 'Entrenar Nuevo Modelo'")
+                    st.write("3. Espera 10-15 minutos")
+                    st.write("4. ¡Regresa aquí para ver las predicciones!")
+                elif not predictions_data.get('predictions'):
+                    st.warning("📅 **No hay partidos disponibles**")
+                    st.write("No se encontraron partidos para mostrar predicciones.")
+                    st.write("Esto puede deberse a:")
+                    st.write("- No hay partidos próximos en la base de datos")
+                    st.write("- Necesitas actualizar los datos de partidos")
+                else:
+                    st.warning("⚠️ No se pudieron obtener las predicciones")
+            else:
+                st.error("❌ **Error de conexión**")
+                st.write("No se pudo conectar con la API. Verifica que los servicios estén funcionando.")
 
     with tab3:
         st.header("📈 Rendimiento Histórico")
@@ -617,36 +672,160 @@ def main():
         with col1:
             st.subheader("Actualizar Datos")
             
-            if st.button("Actualizar Equipos", type="primary"):
-                with st.spinner("Actualizando equipos..."):
-                    result = make_api_request(f"/data/update-teams/{current_season}", method="POST")
-                    if result:
-                        st.success("Actualización de equipos iniciada")
+            st.write("**Actualizar datos de la temporada:**")
             
-            if st.button("Actualizar Partidos"):
-                with st.spinner("Actualizando partidos..."):
-                    result = make_api_request(f"/data/update-matches/{current_season}", method="POST")
-                    if result:
-                        st.success("Actualización de partidos iniciada")
+            # Función para monitorear progreso
+            def monitor_update_progress(update_type, initial_count, expected_count, check_field):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                import time
+                for i in range(30):  # Máximo 30 iteraciones (5 minutos)
+                    time.sleep(10)  # Esperar 10 segundos entre checks
+                    
+                    # Obtener estado actual
+                    current_status = make_api_request(f"/data/status/{current_season}")
+                    if current_status:
+                        current_count = current_status.get(check_field, initial_count)
+                        
+                        # Calcular progreso con límite máximo de 1.0
+                        if expected_count <= initial_count:
+                            progress = 1.0 if current_count > initial_count else 0.0
+                        else:
+                            progress = min((current_count - initial_count) / (expected_count - initial_count), 1.0)
+                        
+                        progress_bar.progress(max(0.0, progress))  # Asegurar que no sea negativo
+                        
+                        # Determinar si está completo
+                        is_complete = (current_count >= expected_count) or (progress >= 1.0) or (current_count > initial_count and i > 3)
+                        
+                        if is_complete:
+                            status_text.success(f"✅ Actualización de {update_type} completada! ({current_count} registros)")
+                            progress_bar.progress(1.0)
+                            break
+                        else:
+                            status_text.info(f"⏳ Actualizando {update_type}... ({current_count} registros)")
+                    else:
+                        status_text.warning("⚠️ No se pudo verificar el progreso")
+                        break
+                
+                return current_count if current_status else initial_count
             
-            if st.button("Actualizar Estadísticas"):
-                with st.spinner("Actualizando estadísticas..."):
-                    result = make_api_request(f"/data/update-statistics/{current_season}", method="POST")
-                    if result:
-                        st.success("Actualización de estadísticas iniciada")
+            if st.button("🏈 Actualizar Equipos", type="primary", key="btn_teams"):
+                # Obtener estado inicial
+                initial_status = make_api_request(f"/data/status/{current_season}")
+                initial_teams = initial_status.get('teams_total', 0) if initial_status else 0
+                
+                # Iniciar actualización
+                result = make_api_request(f"/data/update-teams/{current_season}", method="POST")
+                if result:
+                    st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                    
+                    # Monitorear progreso
+                    with st.container():
+                        st.write("**Monitoreando progreso:**")
+                        monitor_update_progress("equipos", initial_teams, 40, "teams_total")
+                else:
+                    st.error("❌ Error al iniciar actualización de equipos")
+            
+            if st.button("⚽ Actualizar Partidos", key="btn_matches"):
+                # Obtener estado inicial
+                initial_status = make_api_request(f"/data/status/{current_season}")
+                initial_matches = initial_status.get('matches_total', 0) if initial_status else 0
+                
+                # Iniciar actualización
+                result = make_api_request(f"/data/update-matches/{current_season}", method="POST")
+                if result:
+                    st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                    
+                    # Monitorear progreso
+                    with st.container():
+                        st.write("**Monitoreando progreso:**")
+                        monitor_update_progress("partidos", initial_matches, 760, "matches_total")
+                else:
+                    st.error("❌ Error al iniciar actualización de partidos")
+            
+            if st.button("📊 Actualizar Estadísticas", key="btn_stats"):
+                # Obtener estado inicial
+                initial_status = make_api_request(f"/data/status/{current_season}")
+                initial_stats = initial_status.get('team_statistics_total', 0) if initial_status else 0
+                
+                # Iniciar actualización
+                result = make_api_request(f"/data/update-statistics/{current_season}", method="POST")
+                if result:
+                    st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                    
+                    # Monitorear progreso
+                    with st.container():
+                        st.write("**Monitoreando progreso:**")
+                        monitor_update_progress("estadísticas", initial_stats, 40, "team_statistics_total")
+                else:
+                    st.error("❌ Error al iniciar actualización de estadísticas")
         
         with col2:
             st.subheader("Estado de los Datos")
             
-            # Get teams count
-            teams_data = make_api_request("/teams/")
-            if teams_data:
-                st.metric("Total Equipos", len(teams_data))
+            # Botón para refrescar estado
+            if st.button("🔄 Refrescar Estado", key="btn_refresh"):
+                st.rerun()
             
-            # Get matches count (would need API endpoint)
-            st.metric("Partidos Temporada", "N/A")
+            # Obtener estado actual de los datos
+            status_data = make_api_request(f"/data/status/{current_season}")
             
-            st.metric("Última Actualización", "N/A")
+            if status_data:
+                # Métricas principales
+                col2_1, col2_2 = st.columns(2)
+                
+                with col2_1:
+                    teams_progress = min(status_data['teams_total'] / max(status_data['teams_expected'], 1), 1.0)
+                    st.metric(
+                        "Equipos", 
+                        f"{status_data['teams_total']}/{status_data['teams_expected']}", 
+                        delta="✅ Completo" if status_data['teams_total'] >= status_data['teams_expected'] else f"{teams_progress:.1%} completo"
+                    )
+                    
+                    matches_progress = min(status_data['matches_total'] / max(status_data['matches_expected_per_season'], 1), 1.0) if status_data['matches_expected_per_season'] > 0 else 0
+                    st.metric(
+                        "Partidos", 
+                        f"{status_data['matches_total']}", 
+                        delta=f"{status_data['matches_total']} cargados"
+                    )
+                
+                with col2_2:
+                    st.metric(
+                        "Partidos c/Resultados", 
+                        f"{status_data['matches_with_results']}"
+                    )
+                    
+                    stats_progress = min(status_data['team_statistics_total'] / max(status_data['stats_expected'], 1), 1.0) if status_data['stats_expected'] > 0 else 0
+                    st.metric(
+                        "Estadísticas", 
+                        f"{status_data['team_statistics_total']}/{status_data['stats_expected']}", 
+                        delta="✅ Completo" if status_data['team_statistics_total'] >= status_data['stats_expected'] else f"{stats_progress:.1%} completo"
+                    )
+                
+                # Barras de progreso visuales
+                st.write("**Progreso de Datos:**")
+                
+                st.write("Equipos:")
+                st.progress(teams_progress)
+                
+                st.write("Estadísticas:")
+                st.progress(stats_progress)
+                
+                # Fechas de última actualización
+                if status_data['last_match_update']:
+                    from datetime import datetime
+                    last_update = datetime.fromisoformat(status_data['last_match_update'].replace('Z', '+00:00'))
+                    st.write(f"**Última actualización partidos:** {last_update.strftime('%Y-%m-%d %H:%M')}")
+                
+                if status_data['last_stats_update']:
+                    last_stats = datetime.fromisoformat(status_data['last_stats_update'].replace('Z', '+00:00'))
+                    st.write(f"**Última actualización estadísticas:** {last_stats.strftime('%Y-%m-%d %H:%M')}")
+                
+            else:
+                st.warning("⚠️ No se pudo obtener el estado de los datos")
+                st.info("Asegúrate de que la API esté funcionando correctamente")
     
     with tab6:
         st.header("🤖 Gestión del Modelo de Machine Learning")
@@ -680,10 +859,13 @@ def main():
             
             if st.button("Entrenar Nuevo Modelo", type="primary"):
                 with st.spinner("Entrenando modelo... Esto puede tomar varios minutos."):
-                    result = make_api_request("/model/train", {"season": current_season}, method="POST")
+                    # Llamar al endpoint con season como query parameter
+                    result = make_api_request(f"/model/train?season={current_season}", method="POST")
                     if result:
-                        st.success(f"Entrenamiento iniciado con {result['training_samples']} muestras")
-                        st.info("El entrenamiento se ejecuta en segundo plano. Actualiza la página en unos minutos.")
+                        st.success(f"✅ Entrenamiento iniciado con {result.get('training_samples', 'N/A')} muestras")
+                        st.info("⏳ El entrenamiento se ejecuta en segundo plano. Actualiza la página en unos minutos.")
+                    else:
+                        st.error("❌ Error al iniciar el entrenamiento del modelo")
             
             st.subheader("Configuración del Modelo")
             st.info("Configuración actual:")
