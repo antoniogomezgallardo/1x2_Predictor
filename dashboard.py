@@ -268,20 +268,49 @@ def main():
                     else:
                         st.write("**Partido 15**: Equipo A vs Equipo B")
                     
-                    pleno_opciones = {
-                        "1": "🏠 Equipo local gana",
-                        "X": "🤝 Empate",
-                        "2": "✈️ Equipo visitante gana", 
-                        "M": "⚽ Un equipo marca 3+ goles"
+                    st.write("### 🏆 Pleno al 15 (Predicción de Goles)")
+                    st.info("📝 **Reglas oficiales**: Debes predecir cuántos goles marcará cada equipo. Opciones: 0, 1, 2, o M (3 o más goles)")
+                    
+                    # Obtener nombres de equipos del partido 15
+                    if predictions and predictions.get('matches') and len(predictions['matches']) >= 15:
+                        partido_15 = predictions['matches'][14]  # Index 14 = partido 15
+                        home_team_name = partido_15.get('home_team', 'Equipo Local')
+                        away_team_name = partido_15.get('away_team', 'Equipo Visitante')
+                    else:
+                        home_team_name = 'Equipo Local'
+                        away_team_name = 'Equipo Visitante'
+                    
+                    # Opciones de goles para cada equipo
+                    goles_opciones = {
+                        "0": "0 goles",
+                        "1": "1 gol",
+                        "2": "2 goles", 
+                        "M": "3 o más goles"
                     }
                     
-                    pleno_al_15 = st.selectbox(
-                        "Selecciona tu pronóstico para el Pleno al 15:",
-                        options=list(pleno_opciones.keys()),
-                        format_func=lambda x: pleno_opciones[x],
-                        index=1,
-                        help="Según las reglas oficiales: 1=Local gana, X=Empate, 2=Visitante gana, M=Un equipo marca 3 o más goles"
-                    )
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        pleno_home = st.selectbox(
+                            f"🏠 Goles de {home_team_name}:",
+                            options=list(goles_opciones.keys()),
+                            format_func=lambda x: goles_opciones[x],
+                            index=1,  # Default 1 gol
+                            help=f"Predice cuántos goles marcará {home_team_name}"
+                        )
+                    with col2:
+                        pleno_away = st.selectbox(
+                            f"✈️ Goles de {away_team_name}:",
+                            options=list(goles_opciones.keys()),
+                            format_func=lambda x: goles_opciones[x],
+                            index=1,  # Default 1 gol
+                            help=f"Predice cuántos goles marcará {away_team_name}"
+                        )
+                    
+                    # Mostrar resumen de predicción
+                    st.write(f"**Tu predicción**: {home_team_name} {pleno_home} - {pleno_away} {away_team_name}")
+                    
+                    # Combinar para almacenamiento
+                    pleno_al_15 = f"{pleno_home}-{pleno_away}"
                     
                     # Costo de la quiniela (usando precios oficiales)
                     st.write("### 💰 Información de Apuesta")
@@ -879,60 +908,60 @@ def main():
             
             # Sección de borrar datos
             st.markdown("---")
-            st.subheader("🗑️ Borrar Datos")
-            st.error("⚠️ **ZONA PELIGROSA** - Esta acción NO se puede deshacer")
+            st.subheader("🗑️ Borrar Datos del Sistema")
+            st.warning("⚠️ Esta acción eliminará equipos, partidos y estadísticas")
             
-            with st.expander("🚨 Borrar TODOS los datos de la base de datos"):
+            with st.expander("🗑️ Borrar datos del sistema"):
                 st.markdown("""
-                **Esta acción eliminará TODOS los datos:**
-                - ❌ Todos los equipos
-                - ❌ Todos los partidos 
-                - ❌ Todas las estadísticas
-                - ❌ Todas las quinielas guardadas
-                - ❌ Todo el historial
+                **Esta acción eliminará:**
+                - 👥 Todos los equipos
+                - ⚽ Todos los partidos y resultados
+                - 📊 Todas las estadísticas de equipos
+                
+                **✅ Se preservan:**
+                - 🎯 Tus quinielas personales
+                - 📈 Tu historial de predicciones
                 
                 **⚠️ ESTA ACCIÓN NO SE PUEDE DESHACER ⚠️**
                 """)
                 
                 # Requerir confirmación explícita
                 confirm_delete = st.text_input(
-                    "Para confirmar, escribe: BORRAR_TODO",
-                    placeholder="Escribe BORRAR_TODO para confirmar",
+                    "Para confirmar, escribe: BORRAR_DATOS",
+                    placeholder="Escribe BORRAR_DATOS para confirmar",
                     key="confirm_delete_input"
                 )
                 
                 col_btn1, col_btn2 = st.columns(2)
                 
                 with col_btn1:
-                    delete_enabled = confirm_delete == "BORRAR_TODO"
+                    delete_enabled = confirm_delete == "BORRAR_DATOS"
                     
                     if st.button(
-                        "🗑️ BORRAR TODOS LOS DATOS", 
+                        "🗑️ BORRAR DATOS DEL SISTEMA", 
                         type="primary" if delete_enabled else "secondary",
                         disabled=not delete_enabled,
-                        key="btn_delete_all"
+                        key="btn_delete_data"
                     ):
                         if delete_enabled:
-                            with st.spinner("🗑️ Borrando todos los datos..."):
+                            with st.spinner("🗑️ Borrando equipos, partidos y estadísticas..."):
                                 # Llamar al endpoint de borrar datos
                                 result = make_api_request(
-                                    "/data/clear-all?confirm=DELETE_ALL_DATA", 
+                                    "/data/clear-statistics?confirm=DELETE_STATISTICS", 
                                     method="DELETE"
                                 )
                                 
                                 if result:
-                                    st.success("✅ Todos los datos han sido borrados exitosamente")
+                                    st.success("✅ Los datos del sistema han sido borrados exitosamente")
                                     
                                     # Mostrar resumen de lo que se borró
                                     if 'records_deleted' in result:
                                         deleted = result['records_deleted']
                                         st.info(f"""
                                         **Registros eliminados:**
-                                        - Equipos: {deleted.get('teams', 0)}
-                                        - Partidos: {deleted.get('matches', 0)}  
-                                        - Estadísticas: {deleted.get('team_statistics', 0)}
-                                        - Quinielas: {deleted.get('user_quinielas', 0)}
-                                        - Predicciones: {deleted.get('user_quiniela_predictions', 0)}
+                                        - 👥 Equipos: {deleted.get('teams', 0)}
+                                        - ⚽ Partidos: {deleted.get('matches', 0)}  
+                                        - 📊 Estadísticas: {deleted.get('statistics', 0)}
                                         """)
                                     
                                     # Mostrar próximos pasos
@@ -946,7 +975,7 @@ def main():
                                 else:
                                     st.error("❌ Error al borrar los datos")
                         else:
-                            st.error("⚠️ Debes escribir 'BORRAR_TODO' para confirmar")
+                            st.error("⚠️ Debes escribir 'BORRAR_DATOS' para confirmar")
                 
                 with col_btn2:
                     st.write("")  # Espaciado

@@ -28,30 +28,35 @@
 
 ## 🚀 Plan de Implementación
 
-### Fase 1: Corrección del Pleno al 15 (Prioridad Alta)
+### Fase 1: Corrección del Pleno al 15 (✅ COMPLETADO)
 
-**Problema Actual**: El Pleno al 15 solo tiene opciones 1, X, 2
-**Solución**: Agregar opción "M" para 3+ goles
+**Problema Identificado**: El Pleno al 15 usaba predicciones 1X2 en lugar de goles por equipo
+**Solución Implementada**: Sistema correcto de predicción de goles para cada equipo (0, 1, 2, M)
 
-**Cambios Necesarios:**
+**Cambios Implementados:**
 
 1. **Backend - Modelo de Datos**:
 ```python
-# En UserQuinielaPrediction model
-pleno_al_15 = Column(String(2))  # Permitir "M" además de "1", "X", "2"
+# En UserQuiniela model - IMPLEMENTADO
+pleno_al_15_home = Column(String(1), nullable=True)  # Goles equipo local: "0", "1", "2", "M" 
+pleno_al_15_away = Column(String(1), nullable=True)  # Goles equipo visitante: "0", "1", "2", "M"
 ```
 
 2. **Backend - Validación**:
 ```python
-def validate_pleno_al_15(prediction: str):
-    if prediction not in ["1", "X", "2", "M"]:
-        raise ValidationError("Pleno al 15 must be 1, X, 2, or M")
+# En quiniela_constants.py - IMPLEMENTADO
+def validate_pleno_al_15(home_goals: str, away_goals: str) -> bool:
+    return (home_goals in OPCIONES_PLENO_AL_15 and away_goals in OPCIONES_PLENO_AL_15)
+
+OPCIONES_PLENO_AL_15 = ["0", "1", "2", "M"]  # Goles por equipo
 ```
 
 3. **Dashboard - UI**:
 ```python
-# En dashboard.py, sección Pleno al 15
-pleno_options = ["1 (Local gana)", "X (Empate)", "2 (Visitante gana)", "M (3+ goles)"]
+# En dashboard.py - IMPLEMENTADO
+# Dos selectores separados para goles de cada equipo
+pleno_home = st.selectbox("🏠 Goles de {home_team_name}", options=["0", "1", "2", "M"])
+pleno_away = st.selectbox("✈️ Goles de {away_team_name}", options=["0", "1", "2", "M"])
 ```
 
 ### Fase 2: Sistema de Precios (Prioridad Alta)
@@ -258,11 +263,12 @@ def render_performance_analysis():
 
 ## 🎯 Cronograma de Implementación
 
-### Sprint 1 (Semana 1-2): Correcciones Básicas
+### Sprint 1 (Semana 1-2): Correcciones Básicas ✅ COMPLETADO
 - [x] ✅ Validación de temporadas (completado)
-- [ ] 🔧 Corrección Pleno al 15 (opción M)
-- [ ] 💰 Sistema de precios básico
-- [ ] 📱 UI mejorado para creación de quinielas
+- [x] ✅ Corrección Pleno al 15 (predicción goles por equipo)
+- [x] ✅ Ordenamiento correcto de partidos (La Liga alfabético + Segunda)
+- [x] ✅ Sistema de borrado selectivo de datos
+- [x] ✅ UI mejorado para creación de quinielas
 
 ### Sprint 2 (Semana 3-4): Modalidades Múltiples
 - [ ] 🎲 Múltiple Directo (2-8 apuestas)

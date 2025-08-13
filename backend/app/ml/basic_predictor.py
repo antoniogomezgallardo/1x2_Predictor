@@ -292,12 +292,21 @@ def create_basic_predictions_for_quiniela(db: Session, season: int) -> List[Dict
         SPANISH_LEAGUES = [140, 141]  # La Liga, Segunda División
         
         # Buscar próximos partidos sin resultado de las ligas españolas
-        upcoming_matches = db.query(Match).filter(
+        # NOTA: Orden crucial para Quiniela oficial - La Liga primero, luego Segunda División
+        # Hacer join con equipos para poder ordenar por nombre de equipo local
+        from ..database.models import Team
+        upcoming_matches = db.query(Match).join(
+            Team, Match.home_team_id == Team.id
+        ).filter(
             Match.season == season,
             Match.league_id.in_(SPANISH_LEAGUES),  # Solo ligas españolas
             Match.result.is_(None),  # Sin resultado aún
             Match.home_goals.is_(None)  # Sin goles registrados
-        ).order_by(Match.match_date, Match.league_id.desc()).all()  # Ordenar por fecha, La Liga primero
+        ).order_by(
+            Match.league_id.desc(),  # La Liga (140) primero, Segunda (141) después
+            Team.name,               # Orden alfabético por equipo local (tradicional Quiniela)
+            Match.match_date         # Luego por fecha dentro de cada equipo
+        ).all()
         
         logger.info(f"Found {len(upcoming_matches)} upcoming Spanish league matches for season {season}")
         
@@ -338,15 +347,19 @@ def create_basic_predictions_for_quiniela(db: Session, season: int) -> List[Dict
         if best_round and best_count >= 10:
             # Usar partidos de la mejor jornada
             round_matches = matches_by_round[best_round]
-            # Priorizar La Liga sobre Segunda División
+            
+            # ORDEN OFICIAL QUINIELA: La Liga primero (ordenados), Segunda División después
             la_liga_matches = [m for m in round_matches if m.league_id == 140]
             segunda_matches = [m for m in round_matches if m.league_id == 141]
             
-            # Combinar: máximo 10 de La Liga + completar con Segunda hasta 15
+            # Los partidos ya vienen ordenados correctamente desde la query SQL
+            # La Liga primero en orden alfabético, Segunda División después
+            
+            # Combinar: máximo 10 de La Liga + completar con Segunda hasta 15 (orden oficial)
             selected_matches = la_liga_matches[:10] + segunda_matches[:5]
             selected_matches = selected_matches[:15]  # Máximo 15
             
-            logger.info(f"Selected {len(selected_matches)} matches from round {best_round}: {len([m for m in selected_matches if m.league_id == 140])} La Liga + {len([m for m in selected_matches if m.league_id == 141])} Segunda")
+            logger.info(f"Selected {len(selected_matches)} matches from round {best_round} in OFFICIAL ORDER: {len([m for m in selected_matches if m.league_id == 140])} La Liga + {len([m for m in selected_matches if m.league_id == 141])} Segunda")
         else:
             # Fallback: seleccionar los primeros 15 partidos más próximos
             selected_matches = upcoming_matches[:15]

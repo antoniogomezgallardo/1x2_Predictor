@@ -666,13 +666,22 @@ async def create_user_quiniela(
     try:
         from datetime import date
         
+        # Procesar Pleno al 15 (formato: "home_goals-away_goals")
+        pleno_al_15_data = quiniela_data.get("pleno_al_15", "1-1")
+        if "-" in pleno_al_15_data:
+            pleno_home, pleno_away = pleno_al_15_data.split("-", 1)
+        else:
+            # Backward compatibility - si viene en formato antiguo, asignar valores por defecto
+            pleno_home, pleno_away = "1", "1"
+        
         # Crear quiniela
         user_quiniela = UserQuiniela(
             week_number=quiniela_data["week_number"],
             season=quiniela_data["season"],
             quiniela_date=date.fromisoformat(quiniela_data["date"]),
             cost=quiniela_data["cost"],
-            pleno_al_15=quiniela_data.get("pleno_al_15")
+            pleno_al_15_home=pleno_home,
+            pleno_al_15_away=pleno_away
         )
         
         db.add(user_quiniela)
@@ -745,7 +754,8 @@ async def get_user_quiniela_history(
                 "accuracy": quiniela.accuracy,
                 "correct_predictions": quiniela.correct_predictions,
                 "total_predictions": quiniela.total_predictions,
-                "pleno_al_15": quiniela.pleno_al_15
+                "pleno_al_15_home": quiniela.pleno_al_15_home,
+                "pleno_al_15_away": quiniela.pleno_al_15_away
             })
         
         # Calcular estadísticas generales
@@ -929,57 +939,46 @@ async def get_financial_summary(season: int, db: Session = Depends(get_db)):
     }
 
 
-@app.delete("/data/clear-all")
-async def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
+@app.delete("/data/clear-statistics")
+async def clear_statistics_data(confirm: str = None, db: Session = Depends(get_db)):
     """
-    Clear ALL data from the database - USE WITH EXTREME CAUTION
-    Requires confirmation parameter: confirm=DELETE_ALL_DATA
+    Clear teams, matches and statistics from the database (preserves user quinielas)
+    Requires confirmation parameter: confirm=DELETE_STATISTICS
     """
     try:
         # Safety check - require explicit confirmation
-        if confirm != "DELETE_ALL_DATA":
+        if confirm != "DELETE_STATISTICS":
             raise HTTPException(
                 status_code=400,
                 detail={
                     "error": "Confirmation required",
-                    "message": "To delete all data, you must provide: confirm=DELETE_ALL_DATA",
-                    "warning": "This action cannot be undone!",
-                    "example": "/data/clear-all?confirm=DELETE_ALL_DATA"
+                    "message": "To delete data, you must provide: confirm=DELETE_STATISTICS",
+                    "warning": "This will delete teams, matches and statistics but preserve user quinielas",
+                    "example": "/data/clear-statistics?confirm=DELETE_STATISTICS"
                 }
             )
         
-        logger.warning("🚨 CLEARING ALL DATABASE DATA - This action was requested by user")
+        logger.warning("🗑️ CLEARING TEAMS, MATCHES & STATISTICS DATA - This action was requested by user")
         
         # Count records before deletion for reporting
         counts_before = {
+            "teams": db.query(Team).count(),
             "matches": db.query(Match).count(),
-            "teams": db.query(Team).count(), 
-            "team_statistics": db.query(TeamStatistics).count(),
-            "user_quinielas": db.query(UserQuiniela).count(),
-            "user_predictions": db.query(UserQuinielaPrediction).count()
+            "statistics": db.query(TeamStatistics).count()
         }
         
         logger.info(f"Records before deletion: {counts_before}")
         
         # Delete in correct order to respect foreign key constraints
-        
-        # 1. Delete user predictions first
-        deleted_user_predictions = db.query(UserQuinielaPrediction).delete()
+        # 1. Delete team statistics first
+        deleted_statistics = db.query(TeamStatistics).delete()
         db.commit()
         
-        # 2. Delete user quinielas
-        deleted_user_quinielas = db.query(UserQuiniela).delete()
-        db.commit()
-        
-        # 3. Delete team statistics 
-        deleted_team_stats = db.query(TeamStatistics).delete()
-        db.commit()
-        
-        # 4. Delete matches
+        # 2. Delete matches
         deleted_matches = db.query(Match).delete()
         db.commit()
         
-        # 5. Delete teams last
+        # 3. Delete teams last
         deleted_teams = db.query(Team).delete()
         db.commit()
         
@@ -988,41 +987,34 @@ async def clear_all_data(confirm: str = None, db: Session = Depends(get_db)):
             db.execute("ALTER SEQUENCE teams_id_seq RESTART WITH 1")
             db.execute("ALTER SEQUENCE matches_id_seq RESTART WITH 1")
             db.execute("ALTER SEQUENCE team_statistics_id_seq RESTART WITH 1")
-            db.execute("ALTER SEQUENCE user_quinielas_id_seq RESTART WITH 1")
-            db.execute("ALTER SEQUENCE user_quiniela_predictions_id_seq RESTART WITH 1")
             db.commit()
         except Exception as e:
             logger.warning(f"Could not reset sequences (may not be PostgreSQL): {e}")
         
         # Verify deletion
         counts_after = {
-            "matches": db.query(Match).count(),
             "teams": db.query(Team).count(),
-            "team_statistics": db.query(TeamStatistics).count(),
-            "user_quinielas": db.query(UserQuiniela).count(),
-            "user_predictions": db.query(UserQuinielaPrediction).count()
+            "matches": db.query(Match).count(),
+            "statistics": db.query(TeamStatistics).count()
         }
         
-        logger.warning(f"🗑️ Database cleared successfully. Records after: {counts_after}")
+        logger.warning(f"🗑️ Data cleared successfully. Records after: {counts_after}")
         
         return {
-            "message": "All database data has been successfully cleared",
-            "warning": "This action cannot be undone!",
+            "message": "Teams, matches and statistics data has been successfully cleared",
+            "info": "User quinielas are preserved",
             "records_deleted": {
-                "user_quiniela_predictions": deleted_user_predictions,
-                "user_quinielas": deleted_user_quinielas,
-                "team_statistics": deleted_team_stats,
+                "teams": deleted_teams,
                 "matches": deleted_matches,
-                "teams": deleted_teams
+                "statistics": deleted_statistics
             },
             "counts_before": counts_before,
             "counts_after": counts_after,
             "status": "success",
             "timestamp": datetime.now().isoformat(),
             "next_steps": [
-                "1. Update teams data: POST /data/update-teams/{season}",
-                "2. Update matches data: POST /data/update-matches/{season}", 
-                "3. Update statistics: POST /data/update-statistics/{season}"
+                "1. Update statistics: POST /data/update-statistics/{season}",
+                "2. Re-train model if needed: POST /model/train?season={season}"
             ]
         }
         

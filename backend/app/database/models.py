@@ -176,7 +176,9 @@ class UserQuiniela(Base):
     cost = Column(Float, nullable=False)  # Lo que se gastó
     winnings = Column(Float, default=0.0)  # Lo que se ganó
     is_finished = Column(Boolean, default=False)  # Si la jornada terminó
-    pleno_al_15 = Column(String(1), nullable=True)  # "0", "1", "2", "M"
+    # Pleno al 15: predicción de goles para cada equipo en el partido 15
+    pleno_al_15_home = Column(String(1), nullable=True)  # Goles equipo local: "0", "1", "2", "M" 
+    pleno_al_15_away = Column(String(1), nullable=True)  # Goles equipo visitante: "0", "1", "2", "M"
     
     # Estadísticas de la quiniela
     total_predictions = Column(Integer, default=14)

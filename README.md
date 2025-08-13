@@ -460,6 +460,23 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ## 📝 Últimos Cambios
 
+### Versión 1.5.0 (2025-08-13) - Corrección Pleno al 15 + Orden Oficial + Gestión Mejorada
+
+**🏆 Pleno al 15 Oficial Implementado:**
+- ✅ **Reglas BOE Cumplidas**: Predicción correcta de goles por equipo (0, 1, 2, M) según normativa oficial
+- ✅ **UI Dual**: Dos selectores separados para goles del equipo local y visitante  
+- ✅ **Backward Compatibility**: Sistema maneja formato anterior automáticamente
+
+**📋 Orden Oficial de Partidos:**
+- ✅ **Orden Auténtico**: Partidos ordenados como en Quiniela real (La Liga alfabético + Segunda)
+- ✅ **SQL Optimizado**: Query con JOIN para ordenamiento correcto desde base de datos
+- ✅ **Selección Inteligente**: Máximo 10 La Liga + completar con Segunda División hasta 15
+
+**🗑️ Gestión de Datos Mejorada:**
+- ✅ **Borrado Selectivo**: Elimina equipos, partidos y estadísticas pero preserva quinielas del usuario
+- ✅ **Interfaz Clara**: Explicación detallada de qué se borra vs qué se preserva
+- ✅ **Confirmación Segura**: Nuevo formato de confirmación "BORRAR_DATOS"
+
 ### Versión 1.4.0 (2025-08-13) - Sistema Híbrido de Predicciones + Gestión Completa
 
 **🎯 Nuevas Funcionalidades Principales:**

@@ -743,8 +743,56 @@ curl -X GET "localhost:8000/quiniela/next-matches/2025"
 curl -X DELETE "localhost:8000/data/clear-all?confirm=DELETE_ALL_DATA"
 ```
 
+## 🆕 Actualización v1.5.0 - Corrección Pleno al 15 + Orden Oficial
+
+### 🏆 Pleno al 15 Oficial Implementado (2025-08-13)
+
+**Problema Crítico Detectado**: El sistema implementaba Pleno al 15 incorrectamente usando predicciones 1X2 (local gana, empate, visitante gana) en lugar del sistema oficial de goles por equipo.
+
+**Solución Implementada**: Sistema completamente rediseñado según reglas BOE oficiales.
+
+**Cambios Clave:**
+- **ANTES**: Un selector con opciones [1, X, 2, M] (incorrecto)
+- **AHORA**: Dos selectores separados - uno para cada equipo con opciones [0, 1, 2, M] (correcto)
+
+```python
+# Implementación correcta (v1.5.0)
+pleno_al_15_home = Column(String(1), nullable=True)  # Goles equipo local: "0", "1", "2", "M" 
+pleno_al_15_away = Column(String(1), nullable=True)  # Goles equipo visitante: "0", "1", "2", "M"
+
+# UI corregida en dashboard
+pleno_home = st.selectbox("🏠 Goles de {home_team_name}", options=["0", "1", "2", "M"])
+pleno_away = st.selectbox("✈️ Goles de {away_team_name}", options=["0", "1", "2", "M"])
+```
+
+### 📋 Orden Oficial de Partidos Implementado
+
+**Problema Detectado**: Los partidos aparecían desordenados respecto a la Quiniela real española.
+
+**Solución SQL Optimizada**: Query con JOIN para ordenamiento correcto desde base de datos.
+
+```python
+# Orden oficial implementado (v1.5.0)
+upcoming_matches = db.query(Match).join(Team, Match.home_team_id == Team.id).order_by(
+    Match.league_id.desc(),  # La Liga (140) primero, Segunda (141) después
+    Team.name,               # Orden alfabético por equipo local (tradicional Quiniela)
+    Match.match_date         # Fecha como criterio secundario
+)
+```
+
+**Resultado**: Partidos ahora aparecen en orden idéntico a Quiniela oficial española.
+
+### 🗑️ Gestión de Datos Mejorada
+
+**Cambio Solicitado**: Usuario requirió que función "borrar" elimine equipos, partidos y estadísticas pero preserve quinielas personales.
+
+**Implementación**: 
+- **Endpoint**: `/data/clear-statistics` (elimina equipos + partidos + estadísticas)
+- **Preserva**: Quinielas del usuario + historial de predicciones
+- **Confirmación**: Nuevo formato "BORRAR_DATOS" más claro
+
 ---
 
 **Última actualización**: 2025-08-13
-**Versión**: 1.4.0
+**Versión**: 1.5.0
 **Maintainer**: Sistema Quiniela Predictor

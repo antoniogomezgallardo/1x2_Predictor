@@ -109,7 +109,15 @@ CATEGORIAS_PREMIOS = {
 
 # Opciones válidas para cada tipo de predicción
 OPCIONES_PARTIDOS = ["1", "X", "2"]  # Local gana, Empate, Visitante gana
-OPCIONES_PLENO_AL_15 = ["1", "X", "2", "M"]  # + Opción M (3+ goles de un equipo)
+OPCIONES_PLENO_AL_15 = ["0", "1", "2", "M"]  # Goles por equipo: 0, 1, 2, o M (3+ goles)
+
+# Explicaciones detalladas del Pleno al 15
+PLENO_AL_15_EXPLICACIONES = {
+    "0": "El equipo no marca ningún gol",
+    "1": "El equipo marca exactamente 1 gol", 
+    "2": "El equipo marca exactamente 2 goles",
+    "M": "El equipo marca 3 o más goles"
+}
 
 # Modalidades de juego
 MODALIDADES = {
@@ -185,9 +193,10 @@ def get_reducida_info(tipo: int) -> dict:
     """Obtiene información detallada de una reducida oficial"""
     return REDUCIDAS_OFICIALES.get(tipo, {})
 
-def validate_pleno_al_15(prediction: str) -> bool:
-    """Valida que la predicción del Pleno al 15 sea correcta"""
-    return prediction in OPCIONES_PLENO_AL_15
+def validate_pleno_al_15(home_goals: str, away_goals: str) -> bool:
+    """Valida que las predicciones del Pleno al 15 sean correctas (goles de cada equipo)"""
+    return (home_goals in OPCIONES_PLENO_AL_15 and 
+            away_goals in OPCIONES_PLENO_AL_15)
 
 def validate_partido_prediction(prediction: str) -> bool:
     """Valida que la predicción de un partido sea correcta"""

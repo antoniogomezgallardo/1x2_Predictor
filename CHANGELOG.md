@@ -1,5 +1,135 @@
 # 📋 Changelog - Quiniela Predictor
 
+## [1.5.0] - 2025-08-13 - Corrección Pleno al 15 + Orden Oficial Partidos + Gestión Mejorada
+
+### 🎯 Correcciones Críticas Implementadas
+
+- **🏆 Pleno al 15 Oficial Implementado**:
+  - **ANTES**: Predicción 1X2 incorrecta (contra reglas oficiales)
+  - **AHORA**: Predicción correcta de goles por equipo (0, 1, 2, M)
+  - **Reglas BOE**: "una por equipo" - cada equipo puede marcar 0, 1, 2, o M (3+) goles
+  - **UI Dual**: Dos selectores separados para goles del equipo local y visitante
+  - **Backend**: Campos `pleno_al_15_home` y `pleno_al_15_away` en base de datos
+
+- **📋 Orden Oficial de Partidos**:
+  - **ANTES**: Partidos ordenados por fecha (desordenados respecto a Quiniela real)
+  - **AHORA**: Orden oficial La Liga alfabético por equipo local + Segunda División
+  - **SQL Optimizado**: JOIN con equipos para ordenamiento correcto desde query
+  - **Lógica Mejorada**: La Liga primero (máximo 10) + Segunda División (completar hasta 15)
+
+- **🗑️ Función Borrado Actualizada**:
+  - **ANTES**: Borraba absolutamente todo (equipos, partidos, estadísticas, quinielas)
+  - **AHORA**: Borra equipos, partidos y estadísticas (preserva quinielas del usuario)
+  - **Endpoint**: `/data/clear-statistics` con confirmación `DELETE_STATISTICS`
+  - **UI Mejorada**: Interfaz clara que explica qué se borra y qué se preserva
+
+### 🔧 Mejoras Técnicas
+
+- **📊 Modelo de Datos Actualizado**:
+  ```python
+  # UserQuiniela model - Pleno al 15 correcto
+  pleno_al_15_home = Column(String(1), nullable=True)  # "0", "1", "2", "M" 
+  pleno_al_15_away = Column(String(1), nullable=True)  # "0", "1", "2", "M"
+  ```
+
+- **⚡ Query Optimizada**:
+  ```python
+  # Orden oficial Quiniela con JOIN
+  upcoming_matches = db.query(Match).join(Team, Match.home_team_id == Team.id).order_by(
+      Match.league_id.desc(),  # La Liga (140) primero
+      Team.name,               # Alfabético por equipo local
+      Match.match_date         # Fecha como criterio secundario
+  )
+  ```
+
+- **🎯 Validación Mejorada**:
+  ```python
+  # Validación dual para Pleno al 15
+  def validate_pleno_al_15(home_goals: str, away_goals: str) -> bool:
+      return (home_goals in OPCIONES_PLENO_AL_15 and away_goals in OPCIONES_PLENO_AL_15)
+  ```
+
+### 🎨 Mejoras de UI/UX
+
+- **🏆 Interfaz Pleno al 15 Rediseñada**:
+  - Explicación clara de reglas oficiales
+  - Dos selectores lado a lado para cada equipo
+  - Resumen visual de predicción: "Equipo A 1 - 2 Equipo B"
+  - Tooltips explicativos para cada opción (0, 1, 2, M)
+
+- **🗑️ Interfaz Borrado Mejorada**:
+  - Título actualizado: "Borrar Datos del Sistema"
+  - Explicación clara de qué se elimina vs qué se preserva
+  - Confirmación cambiada a "BORRAR_DATOS"
+  - Feedback detallado de registros eliminados
+
+### 📁 Archivos Principales Modificados
+
+- **`backend/app/database/models.py`** (Líneas 179-181):
+  - Nuevos campos `pleno_al_15_home` y `pleno_al_15_away`
+  - Eliminado campo obsoleto `pleno_al_15` (single field)
+
+- **`backend/app/config/quiniela_constants.py`** (Líneas 112-120):
+  - Opciones actualizadas: `["0", "1", "2", "M"]` para goles por equipo
+  - Nuevas explicaciones detalladas del Pleno al 15
+  - Función de validación dual implementada
+
+- **`backend/app/ml/basic_predictor.py`** (Líneas 296-309):
+  - Query con JOIN para orden alfabético correcto
+  - Comentarios explicativos sobre orden oficial Quiniela
+
+- **`backend/app/main.py`** (Líneas 669-685, 942-1018):
+  - Lógica de procesamiento dual para Pleno al 15
+  - Endpoint de borrado actualizado (`/data/clear-statistics`)
+  - Preservación de quinielas de usuario
+
+- **`dashboard.py`** (Líneas 271-313, 911-978):
+  - UI dual para Pleno al 15 con explicaciones BOE
+  - Interfaz de borrado actualizada con feedback claro
+
+### 🧪 Casos de Uso Verificados
+
+**Pleno al 15 Correcto:**
+```bash
+# Ejemplo predicción: Barcelona 2 goles, Real Madrid 1 gol
+pleno_al_15_home = "2"  # Barcelona marca 2 goles
+pleno_al_15_away = "1"  # Real Madrid marca 1 gol
+# Resultado: 2-1 para Barcelona
+```
+
+**Orden Oficial Partidos:**
+```bash
+# Orden correcto automático:
+1. Athletic Bilbao vs Real Sociedad     # La Liga (alfabético)
+2. Barcelona vs Real Madrid            # La Liga (alfabético)  
+3. Real Betis vs Sevilla              # La Liga (alfabético)
+...
+11. Almería vs Cádiz                  # Segunda División
+12. Burgos vs Huesca                  # Segunda División
+...
+15. [Partido final]                   # Total 15 partidos
+```
+
+**Borrado Selectivo:**
+```bash
+# Lo que se elimina:
+✅ Teams: 42 → 0
+✅ Matches: 156 → 0  
+✅ Statistics: 89 → 0
+
+# Lo que se preserva:
+✅ User Quinielas: 8 (sin cambios)
+✅ User Predictions: 120 (sin cambios)
+```
+
+### 📊 Beneficios del Update
+
+- **📏 Cumplimiento BOE**: Sistema ahora cumple 100% reglas oficiales Pleno al 15
+- **🎯 Orden Auténtico**: Partidos aparecen en orden idéntico a Quiniela real
+- **💾 Gestión Inteligente**: Borrado preserva datos valiosos del usuario
+- **🎨 UX Mejorada**: Interfaces más claras y educativas sobre reglas oficiales
+- **🔄 Backward Compatibility**: Sistema maneja formato antiguo automáticamente
+
 ## [1.4.0] - 2025-08-13 - Sistema Híbrido de Predicciones + Gestión Completa de BD
 
 ### 🎯 Nuevas Funcionalidades Principales
