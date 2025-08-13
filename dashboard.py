@@ -107,13 +107,14 @@ def main():
     current_season = st.sidebar.selectbox("Temporada", [2025, 2024, 2023], index=0)
     
     # Main navigation
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🎯 Mi Quiniela", 
         "📊 Predicciones Actuales", 
         "📈 Rendimiento", 
         "💰 Análisis Financiero",
         "🔧 Gestión de Datos",
-        "🤖 Modelo ML"
+        "🤖 Modelo ML",
+        "📋 Reglas Oficiales"
     ])
     
     with tab1:
@@ -255,22 +256,50 @@ def main():
                     
                     # Pleno al 15
                     st.write("---")
-                    st.write("### 🎲 Pleno al 15")
-                    st.write("*Solo válido si aciertas los 14 partidos*")
+                    st.write("### 🏆 Pleno al 15")
+                    st.write("*Predicción adicional para el partido 15. Se marca con X la casilla del resultado elegido.*")
+                    
+                    # Obtener datos del partido 15 si están disponibles
+                    if len(predictions['matches']) >= 15:
+                        partido_15 = predictions['matches'][14]  # Index 14 = partido 15
+                        st.write(f"**Partido 15**: {partido_15.get('home_team', 'Equipo A')} vs {partido_15.get('away_team', 'Equipo B')}")
+                    else:
+                        st.write("**Partido 15**: Equipo A vs Equipo B")
+                    
+                    pleno_opciones = {
+                        "1": "🏠 Equipo local gana",
+                        "X": "🤝 Empate",
+                        "2": "✈️ Equipo visitante gana", 
+                        "M": "⚽ Un equipo marca 3+ goles"
+                    }
+                    
                     pleno_al_15 = st.selectbox(
-                        "Predicción de goles:",
-                        options=["0", "1", "2", "M"],
+                        "Selecciona tu pronóstico para el Pleno al 15:",
+                        options=list(pleno_opciones.keys()),
+                        format_func=lambda x: pleno_opciones[x],
                         index=1,
-                        help="0=0 goles, 1=1 gol, 2=2 goles, M=más de 2 goles"
+                        help="Según las reglas oficiales: 1=Local gana, X=Empate, 2=Visitante gana, M=Un equipo marca 3 o más goles"
                     )
                     
-                    # Costo de la quiniela
+                    # Costo de la quiniela (usando precios oficiales)
                     st.write("### 💰 Información de Apuesta")
-                    col1, col2 = st.columns(2)
+                    
+                    # Precio oficial fijo
+                    precio_oficial = 0.75  # €0.75 según normativa oficial
+                    
+                    col1, col2, col3 = st.columns(3)
                     with col1:
-                        cost = st.number_input("Costo de la quiniela (€):", min_value=0.50, value=1.00, step=0.50)
+                        st.metric("💰 Costo por Apuesta", f"€{precio_oficial:.2f}", help="Precio oficial según Loterías y Apuestas del Estado")
                     with col2:
-                        week_number = st.number_input("Número de jornada:", min_value=1, value=1, step=1)
+                        num_apuestas = st.number_input("Número de apuestas:", min_value=1, max_value=8, value=1, step=1,
+                                                     help="Modalidad Simple: 1-8 apuestas por boleto")
+                    with col3:
+                        costo_total = precio_oficial * num_apuestas
+                        st.metric("🧾 Costo Total", f"€{costo_total:.2f}")
+                    
+                    st.info(f"ℹ️ **Modalidad**: Simple ({num_apuestas} apuesta{'s' if num_apuestas > 1 else ''}) - Total: €{costo_total:.2f}")
+                    
+                    week_number = st.number_input("Número de jornada:", min_value=1, value=1, step=1)
                     
                     # Guardar quiniela
                     submitted = st.form_submit_button("💾 Guardar Mi Quiniela", type="primary")
@@ -280,7 +309,7 @@ def main():
                             "week_number": week_number,
                             "season": current_season,
                             "date": datetime.now().date().isoformat(),
-                            "cost": cost,
+                            "cost": costo_total,
                             "pleno_al_15": pleno_al_15,
                             "predictions": user_predictions
                         }
@@ -290,7 +319,7 @@ def main():
                             
                             if result:
                                 st.success(f"✅ Quiniela guardada exitosamente! ID: {result.get('id')}")
-                                st.success(f"💰 Costo registrado: €{cost}")
+                                st.success(f"💰 Costo registrado: €{costo_total:.2f}")
                                 st.balloons()
                                 
                                 # Limpiar predicciones actuales
@@ -404,19 +433,18 @@ def main():
                 if pending_quinielas:
                     st.write("### 📋 Quinielas Pendientes de Resultados")
                     
-                    # Seleccionar quiniela
-                    quiniela_options = {f"Jornada {q['week_number']} - {q['date']} (€{q['cost']})": q for q in pending_quinielas}
-                    selected_quiniela_key = st.selectbox("Selecciona la quiniela:", list(quiniela_options.keys()))
-                    
-                    if selected_quiniela_key:
-                        selected_quiniela = quiniela_options[selected_quiniela_key]
+                    # Formulario para actualizar resultados
+                    with st.form("results_form"):
+                        # Seleccionar quiniela
+                        quiniela_options = {f"Jornada {q['week_number']} - {q['date']} (€{q['cost']})": q for q in pending_quinielas}
+                        selected_quiniela_key = st.selectbox("Selecciona la quiniela:", list(quiniela_options.keys()))
                         
-                        st.write(f"**Quiniela ID:** {selected_quiniela['id']}")
-                        st.write(f"**Jornada:** {selected_quiniela['week_number']}")
-                        st.write(f"**Costo:** €{selected_quiniela['cost']}")
-                        
-                        # Formulario para actualizar resultados
-                        with st.form("results_form"):
+                        if selected_quiniela_key:
+                            selected_quiniela = quiniela_options[selected_quiniela_key]
+                            
+                            st.write(f"**Quiniela ID:** {selected_quiniela['id']}")
+                            st.write(f"**Jornada:** {selected_quiniela['week_number']}")
+                            st.write(f"**Costo:** €{selected_quiniela['cost']}")
                             st.write("### 🏆 Resultados Reales")
                             
                             # Aquí necesitarías obtener las predicciones específicas de esta quiniela
@@ -736,12 +764,22 @@ def main():
                 # Iniciar actualización
                 result = make_api_request(f"/data/update-matches/{current_season}", method="POST")
                 if result:
-                    st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
-                    
-                    # Monitorear progreso
-                    with st.container():
-                        st.write("**Monitoreando progreso:**")
-                        monitor_update_progress("partidos", initial_matches, 760, "matches_total")
+                    # Check if this is a validation response
+                    if 'warning' in result and 'recommendation' in result:
+                        # This is a validation message, not a successful start
+                        st.warning(f"⚠️ {result.get('message', 'Validación')}")
+                        if result.get('warning'):
+                            st.info(f"ℹ️ {result['warning']}")
+                        if result.get('recommendation'):
+                            st.info(f"💡 {result['recommendation']}")
+                    else:
+                        # This is a successful start, monitor progress
+                        st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                        
+                        # Monitorear progreso
+                        with st.container():
+                            st.write("**Monitoreando progreso:**")
+                            monitor_update_progress("partidos", initial_matches, 760, "matches_total")
                 else:
                     st.error("❌ Error al iniciar actualización de partidos")
             
@@ -753,12 +791,22 @@ def main():
                 # Iniciar actualización
                 result = make_api_request(f"/data/update-statistics/{current_season}", method="POST")
                 if result:
-                    st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
-                    
-                    # Monitorear progreso
-                    with st.container():
-                        st.write("**Monitoreando progreso:**")
-                        monitor_update_progress("estadísticas", initial_stats, 40, "team_statistics_total")
+                    # Check if this is a validation response
+                    if 'warning' in result and 'recommendation' in result:
+                        # This is a validation message, not a successful start
+                        st.warning(f"⚠️ {result.get('message', 'Validación')}")
+                        if result.get('warning'):
+                            st.info(f"ℹ️ {result['warning']}")
+                        if result.get('recommendation'):
+                            st.info(f"💡 {result['recommendation']}")
+                    else:
+                        # This is a successful start, monitor progress
+                        st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                        
+                        # Monitorear progreso
+                        with st.container():
+                            st.write("**Monitoreando progreso:**")
+                            monitor_update_progress("estadísticas", initial_stats, 40, "team_statistics_total")
                 else:
                     st.error("❌ Error al iniciar actualización de estadísticas")
         
@@ -875,6 +923,158 @@ Características: ~30 variables
 Validación: 5-fold cross-validation
 Métricas: Accuracy, Precision, Recall, F1-Score
             """)
+
+    with tab7:
+        st.header("📋 Reglas Oficiales de la Quiniela Española")
+        
+        # Información general
+        st.markdown("""
+        ### ℹ️ Información General
+        La Quiniela es una apuesta deportiva oficial regulada por **Loterías y Apuestas del Estado** donde se pronostican 
+        los resultados de partidos de fútbol de **La Liga** y **Segunda División**.
+        """)
+        
+        # Formato de juego
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🎯 Formato de Juego")
+            st.markdown("""
+            - **14 partidos principales**: Pronosticar 1 (local gana), X (empate), o 2 (visitante gana)
+            - **Pleno al 15**: Partido especial con opciones adicionales
+            - **Precio oficial**: €0.75 por apuesta simple
+            - **Modalidades**: Simple, Múltiple, Reducidas, Elige 8
+            """)
+            
+            st.subheader("🏆 Pleno al 15")
+            st.markdown("""
+            **Opciones disponibles:**
+            - **1**: Equipo local gana
+            - **X**: Empate  
+            - **2**: Equipo visitante gana
+            - **M**: Un equipo marca 3 o más goles
+            
+            *Solo válido si aciertas los 14 partidos principales*
+            """)
+        
+        with col2:
+            st.subheader("🏅 Categorías de Premios")
+            
+            premios_data = [
+                {"Categoría": "Especial", "Requisito": "14 aciertos + Pleno al 15", "Color": "🥇"},
+                {"Categoría": "1ª", "Requisito": "14 aciertos", "Color": "🥈"},
+                {"Categoría": "2ª", "Requisito": "13 aciertos", "Color": "🥉"},
+                {"Categoría": "3ª", "Requisito": "12 aciertos", "Color": "🏆"},
+                {"Categoría": "4ª", "Requisito": "11 aciertos", "Color": "🎖️"},
+                {"Categoría": "5ª", "Requisito": "10 aciertos", "Color": "🎗️"}
+            ]
+            
+            for premio in premios_data:
+                st.markdown(f"**{premio['Color']} {premio['Categoría']}**: {premio['Requisito']}")
+        
+        # Modalidades de juego
+        st.subheader("🎲 Modalidades de Juego")
+        
+        modalidad_tab1, modalidad_tab2, modalidad_tab3, modalidad_tab4 = st.tabs([
+            "Simple", "Múltiple Directo", "Múltiple Reducido", "Elige 8"
+        ])
+        
+        with modalidad_tab1:
+            st.markdown("""
+            ### 📝 Modalidad Simple
+            - **Descripción**: De 1 a 8 apuestas diferentes en un mismo boleto
+            - **Precio**: €0.75 por cada apuesta
+            - **Ejemplo**: 3 apuestas simples = 3 × €0.75 = €2.25
+            
+            **Implementación actual**: ✅ Disponible en "Mi Quiniela Personal"
+            """)
+        
+        with modalidad_tab2:
+            st.markdown("""
+            ### 🎯 Múltiple Directo
+            - **Descripción**: Combinar varios pronósticos en un mismo partido
+            - **Doble**: 2 opciones por partido (ej: 1X significa 1 ó X)
+            - **Triple**: 3 opciones por partido (ej: 1X2 significa cualquier resultado)
+            - **Costo**: Se multiplican las combinaciones × €0.75
+            
+            **Ejemplo**: 2 dobles = 2² × €0.75 = 4 × €0.75 = €3.00
+            
+            **Estado**: ❌ No implementado aún
+            """)
+        
+        with modalidad_tab3:
+            st.markdown("""
+            ### 📊 Múltiple Reducido (6 Tipos Oficiales)
+            
+            **Reducidas autorizadas por BOE:**
+            """)
+            
+            reducidas_data = [
+                {"Tipo": "1", "Descripción": "4 triples", "Apuestas": "9/81", "Precio": "€6.75"},
+                {"Tipo": "2", "Descripción": "7 dobles", "Apuestas": "16/128", "Precio": "€12.00"},
+                {"Tipo": "3", "Descripción": "3 dobles + 3 triples", "Apuestas": "24/216", "Precio": "€18.00"},
+                {"Tipo": "4", "Descripción": "2 triples + 6 dobles", "Apuestas": "64/576", "Precio": "€48.00"},
+                {"Tipo": "5", "Descripción": "8 triples", "Apuestas": "81/6561", "Precio": "€60.75"},
+                {"Tipo": "6", "Descripción": "11 dobles", "Apuestas": "132/2048", "Precio": "€99.00"}
+            ]
+            
+            df_reducidas = pd.DataFrame(reducidas_data)
+            st.dataframe(df_reducidas, use_container_width=True)
+            
+            st.info("**Estado**: ❌ No implementado aún - Planificado para futuras versiones")
+        
+        with modalidad_tab4:
+            st.markdown("""
+            ### 🎪 Elige 8
+            - **Descripción**: Modalidad adicional que se juega junto a una Quiniela normal
+            - **Precio**: €0.50 adicional
+            - **Mecánica**: Seleccionar 8 de los 14 partidos y apostar sobre ellos
+            - **Premios**: Según número de aciertos (1 a 8)
+            
+            **Estado**: ❌ No implementado aún
+            """)
+        
+        # Implementación actual vs reglas oficiales
+        st.subheader("🔄 Estado de Implementación")
+        
+        implementacion_col1, implementacion_col2 = st.columns(2)
+        
+        with implementacion_col1:
+            st.markdown("""
+            ### ✅ **Implementado**
+            - ✅ Formato básico (14 + Pleno al 15)
+            - ✅ Opciones correctas (1, X, 2, M)
+            - ✅ Precios oficiales (€0.75)
+            - ✅ Modalidad Simple (1-8 apuestas)
+            - ✅ Sistema de validación de temporadas
+            - ✅ Interfaz intuitiva para crear quinielas
+            """)
+        
+        with implementacion_col2:
+            st.markdown("""
+            ### ⏳ **Pendiente de Implementar**
+            - ❌ Múltiple Directo
+            - ❌ Las 6 Reducidas Oficiales
+            - ❌ Múltiple Condicionado  
+            - ❌ Modalidad Elige 8
+            - ❌ Sistema de premios completo
+            - ❌ Cálculo automático de probabilidades de ganar
+            """)
+        
+        # Disclaimers legales
+        st.subheader("⚠️ Información Legal")
+        st.warning("""
+        **Disclaimer**: Esta aplicación es para fines educativos y de análisis. Las reglas mostradas están basadas en la 
+        normativa oficial de Loterías y Apuestas del Estado. Para jugar oficialmente, utiliza los canales autorizados.
+        
+        **Juego Responsable**: Apuesta solo dinero que puedas permitirte perder. Si crees que puedes tener un problema 
+        con el juego, busca ayuda profesional.
+        """)
+        
+        st.info("""
+        **Fuente**: Reglas basadas en la Resolución de 6 de julio de 2009 de Loterías y Apuestas del Estado, 
+        publicada en el BOE el 23 de julio de 2009.
+        """)
 
 
 if __name__ == "__main__":

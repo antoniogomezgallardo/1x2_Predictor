@@ -1,0 +1,82 @@
+Reglas de la Quiniela 
+
+
+Cada apuesta de La Quiniela consiste en pronosticar, sobre tres opciones, el resultado de un partido de fútbol de dos equipos; hay que acertar si un equipo gana (1), empata (X) o pierde (2) en los catorce primeros partidos, y el resultado del partido número quince (para ello, se marcará con el signo «X» la casilla, una por equipo, que contenga el resultado elegido para el partido, teniendo en cuenta que marcar el signo «X» sobre la casilla que contiene la letra M significa pronosticar que el equipo va a marcar tres o más goles. Debes seleccionar los 14 pronósticos más el pleno al quince de cada apuesta de forma manual (seleccionando tú los pronósticos de cada apuesta) o aleatoria (el sistema selecciona los pronósticos de manera aleatoria).
+
+Tienes dos métodos
+Simple: puede seleccionar como mínimo 2 apuestas y como máximo 8 en un mismo boleto, con 14 pronósticos cada apuesta, más el pleno al quince. Para seleccionar una apuesta se marcan catorce números en el primer bloque más el pleno al quince. Para dos, se marcan catorce números en el primer bloque y catorce en el segundo, más el pleno al quince, y así sucesivamente.
+Múltiple: si lo deseas, puedes seleccionar más de 14 números en tu apuesta, para ello deberás marcar estos exclusivamente en el primer bloque del boleto, mediante la combinación de dos (doble) o tres (triple) pronósticos por partido. Además, es imprescindible marcar en bloque de las 'Combinaciones' el número de dobles y/o triples que se han pronosticado.
+Existen los siguientes métodos múltiples
+Múltiple directo: se puede elegir una combinación de dobles y triples determinada.
+Múltiple reducido: deberás indicar las combinaciones de dobles y triples que desees realizar, y seleccionar los partidos sobre los que desees aplicar las reducciones.
+Múltiple condicionado: deberás indicar las condiciones (variantes, equis y doses), además de los partidos a los que se aplicará dichas condiciones.
+
+
+Cómo jugar Quinielas Múltiples Reducidas
+Existen 6 tipos de reducciones autorizadas:
+
+Reducción 1: 4 triples, 9 apuestas - 6,75€
+Reducción 2: 7 dobles, 16 apuestas - 12€
+Reducción 3: 3 dobles + 3 triples, 24 apuestas - 18€
+Reducción 4: 2 triples + 6 dobles, 64 apuestas - 48€
+Reducción 5: 8 triples, 81 apuestas - 60,75€
+Reducción 6: 11 dobles, 132 apuestas - 99€
+Cómo aplicar la Reducción 1
+
+La reducida primera es un pronóstico múltiple en el que se incorporan 4 triples. Estos 4 triples desarrollados dan lugar a 81 apuestas simples. La reducción consiste en que metódicamente se seleccionan y juegan 9 de las 81 apuestas totales.
+
+En un pronóstico múltiple, si se marcan 4 triples, se juegan 3x3x3x3 = 81 apuestas. El coste de esta Quiniela sería igual a 81 x 0,75€ = 60,75€.
+
+Sin embargo, si marcamos esos 4 triples pero le decimos al sistema que queremos jugarlos en modalidad reducida 1, sólo se jugarán 9 de las posibles 81 apuestas. Por este motivo, el precio de la quiniela reducida será de 9 x 0,75€ = 6,75€.
+
+El sistema selecciona las 9 apuestas que garantizan el máximo número de aciertos posibles. 
+
+En el supuesto de resultar todos los partidos coincidentes con nuestro pronóstico, las 9 apuestas seleccionadas nos garantizan:
+
+11,11% de tener 1 apuesta con 14 aciertos.
+100% de tener 1 apuesta con 13 aciertos.
+El desarrollo de las 9 apuestas seleccionadas en la reducción primera es el siguiente:
+
+
+Esto quiere decir que hay 72 apuestas que no se juegan. Una de ellas sería, por ejemplo, la combinación con un 2 en los cuatro partidos. Si el resultado final de los partidos fuera todos un 2, no habríamos acertado los 4 aciertos. Sin embargo, el bloque 3 nos habría permitido acertar 3.
+
+A la hora de jugar unas apuestas u otras, las reducciones autorizadas y los grupos de pronósticos válidos están regulados en la Resolución de 6 de julio de 2009 de Loterías y Apuestas del Estado. A través de esta Resolución se aprueban las normas que han de regir los concursos de pronósticos de la Apuesta Deportiva desde la primera jornada de la temporada 2009-2010. Esta normativa fue publicada el 23 de julio de 2009.
+
+Las probabilidades de acierto que permite cada una de las reducidas oficiales:
+
+
+Según esta tabla, en la reducida primera tenemos un 11,11% de tener una apuesta de 14 aciertos, siempre y cuando todos los resultados coincidan con el pronóstico. Si esto ocurre, además tendremos 0 de 13, 0 de 12, 8 apuestas de 11 aciertos y 0 de 10. Sin embargo, si no tenemos una apuesta de 14, tendremos un 100% de posibilidades de acertar 1 apuesta de 13 aciertos, 3 de 12, 3 de 11 y 2 de 10.
+
+Jugar Apuestas Múltiples Reducidas con Múltiples sin reducir
+
+Las únicas reducciones autorizadas son las seis que se encuentran en la resolución mencionada anteriormente. Sin embargo, sí que es posible mezclar los pronósticos reducidos con otras apuestas múltiples sin reducir.
+
+En el caso de jugar la reducción primera con 4 triples y además añadimos un doble más no reducido:
+
+9 apuestas que jugamos con los 4 triples en sistema reducido = 6,75€
+Más un doble, 9 apuestas (reducidas) x 2 apuestas múltiples = 18 apuestas = 13,5€
+
+
+Los premios en La Quiniela 
+Se distribuyen entre las siguientes categorías de premios:
+
+Categoría Especial: si se aciertan los 14 resultados más el Pleno al Quince.
+1ª Categoría: si se aciertan los 14 resultados
+2ª Categoría: si se aciertan 13 resultados
+3ª Categoría: si se aciertan 12 resultados
+4ª Categoría: si se aciertan 11 resultados
+5ª Categoría: si se aciertan 10 resultados
+
+
+Elige 8
+Es una modalidad de participación adicional en La Quiniela mediante la apuesta a 8 de los 14 partidos combinables, siendo necesario, para poder participar, realizar una apuesta de La Quiniela al método directo.
+
+El precio de cada apuesta de La Quiniela queda fijado en 0,75 €. El precio de la participación en la modalidad adicional Elige 8 es de 0,50 €.
+
+Forma de pronosticar
+Para pronosticar en Elige 8 será necesario haber realizado una apuesta de La Quiniela al método directo, marcando con el signo «X» ocho de las catorce casillas habilitadas para esta categoría, las cuales se corresponden con los 14 partidos combinables del boleto, replicando el pronóstico introducido en el bloque 1 de La Quiniela en cada uno de esos 8 partidos seleccionados.
+
+Distribución de fondos para premios
+El 55 por 100 de la recaudación íntegra en esta modalidad de participación adicional se distribuirá a partes iguales entre todas las apuestas que tengan acertado el mayor número de pronósticos, siendo ocho el número máximo posible de aciertos y uno el número mínimo. 
+
+En el supuesto de que no hubiera apuestas de Elige 8 con uno o más pronósticos acertados, el fondo destinado a premio pasará a incrementar el de esta misma categoría en la jornada siguiente.

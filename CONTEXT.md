@@ -432,8 +432,212 @@ redis==5.0.1                 # Cache/broker
 - Juego responsable
 - Disclaimer riesgos financieros
 
+## 🔧 Lecciones Aprendidas y Resolución de Problemas
+
+### Validación de Temporadas (Issue: Season Validation)
+
+**Problema Identificado (2025-08-13):**
+Los endpoints de actualización (`/data/update-teams/{season}`, `/data/update-matches/{season}`, `/data/update-statistics/{season}`) se quedaban colgados al intentar actualizar datos para temporadas futuras (2025) que aún no han comenzado.
+
+**Root Cause:**
+- Los endpoints iniciaban background tasks sin validar si la temporada tenía datos disponibles
+- API-Football no tiene datos para temporadas futuras, causando timeouts
+- Falta de validación previa antes de iniciar procesos costosos
+
+**Solución Implementada:**
+```python
+# Validación en todos los endpoints de actualización
+season_likely_not_started = (
+    season > current_year or 
+    (season == current_year and existing_matches == 0 and current_month < 9)
+)
+
+if season_likely_not_started:
+    return {
+        "message": f"Season {season} has not started yet. No data available to update.",
+        "warning": f"Current date: {datetime.now().strftime('%Y-%m')}. Season appears not started.",
+        "recommendation": f"Try updating season {current_year - 1} which has complete data."
+    }
+```
+
+**Archivos Afectados:**
+- `backend/app/main.py:51-79` (update-teams endpoint)
+- `backend/app/main.py:63-101` (update-matches endpoint)  
+- `backend/app/main.py:104-142` (update-statistics endpoint)
+
+**Testing Realizado:**
+```bash
+curl -X POST "http://localhost:8000/data/update-teams/2025"
+# ✅ Devuelve mensaje informativo en lugar de colgarse
+
+curl -X POST "http://localhost:8000/data/update-matches/2025"  
+# ✅ Devuelve mensaje informativo
+
+curl -X POST "http://localhost:8000/data/update-statistics/2025"
+# ✅ Devuelve mensaje informativo
+```
+
+**Prevención Futura:**
+1. **Validación Previa**: Siempre validar disponibilidad de datos antes de iniciar background tasks
+2. **Logging Detallado**: Incluir logs de validación para debugging
+3. **Rebuild Containers**: Para cambios en backend, usar `docker-compose build --no-cache api`
+4. **Testing Inmediato**: Probar endpoints inmediatamente después de cambios
+
+### 🔄 Gestión de Cambios en Contenedores Docker
+
+**IMPORTANTE - Regla de Oro para Docker:**
+```bash
+# Para cambios en código, SIEMPRE hacer rebuild sin caché:
+docker-compose build --no-cache [service-name]
+docker-compose up -d [service-name]
+
+# Para cambios específicos:
+docker-compose build --no-cache api      # Para backend/app/
+docker-compose build --no-cache dashboard # Para dashboard.py
+```
+
+**Por Qué es Necesario:**
+- Docker cachea las capas del build para acelerar construcciones
+- Cambios en archivos Python pueden no reflejarse con `restart` solamente
+- El `--no-cache` fuerza una reconstrucción completa
+- Sin esto, los cambios pueden NO aparecer en la interfaz
+
+**Síntomas de Caché Problemático:**
+- ❌ Cambios en código no se reflejan en la aplicación
+- ❌ UI antigua persiste después de modificaciones
+- ❌ Nuevas funcionalidades no aparecen
+- ❌ Variables/constantes mantienen valores antiguos
+
+**Workflow Recomendado:**
+```bash
+# 1. Hacer cambios en código
+# 2. Build sin caché
+docker-compose build --no-cache [service]
+# 3. Levantar servicio
+docker-compose up -d [service]
+# 4. Verificar cambios inmediatamente
+```
+
+**Patrón de Validación Recomendado:**
+```python
+# En todos los endpoints que consumen APIs externas:
+def validate_season_availability(season: int, db: Session):
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    existing_data = db.query(Model).filter(Model.season == season).count()
+    
+    # Validar si la temporada está disponible
+    if season > current_year or (season == current_year and existing_data == 0 and current_month < 9):
+        raise HTTPException(status_code=400, detail={
+            "message": "Season not available",
+            "recommendation": "Try previous season"
+        })
+```
+
+### Gestión de Temporadas - Fallback Inteligente
+
+**Implementación del Sistema de Fallback:**
+El sistema maneja automáticamente la transición entre temporadas usando datos históricos cuando la temporada actual no tiene datos suficientes.
+
+**Lógica de Fallback en `/quiniela/next-matches/{season}`:**
+1. Intenta usar datos de la temporada solicitada
+2. Si no hay suficientes partidos (< 14), usa temporada anterior
+3. Informa claramente qué temporada se está usando
+4. Proporciona recomendaciones al usuario
+
+**Casos de Uso Principales:**
+- ✅ Temporada 2025 → usa datos de 2024 automáticamente
+- ✅ Dashboard muestra nota informativa sobre fallback
+- ✅ API devuelve `using_previous_season: true` para transparencia
+
+### Sistema de Predicciones Básicas para Nuevas Temporadas
+
+**Problema Identificado (2025-08-13):**
+El endpoint `/quiniela/next-matches/2025` fallaba porque buscaba partidos completados (`Match.result.isnot(None)`) en lugar de partidos futuros para predecir.
+
+**Solución - Predictor Básico Heurístico:**
+
+**Implementación en `backend/app/ml/basic_predictor.py`:**
+- Sistema de predicciones basado en heurísticas cuando no hay datos históricos ML
+- Utiliza datos disponibles de equipos: año fundación, capacidad estadio, liga
+- Calcula ventaja local, experiencia, y factores de liga
+- Genera predicciones realistas con probabilidades balanceadas
+
+**Lógica de Priorización en `/quiniela/next-matches/{season}`:**
+```python
+# PRIMERO: Buscar partidos futuros sin resultado
+upcoming_matches = db.query(Match).filter(
+    Match.season == season,
+    Match.result.is_(None),     # Sin resultado aún
+    Match.home_goals.is_(None)  # Sin goles registrados
+).order_by(Match.match_date).limit(20).all()
+
+# Si hay ≥14 partidos futuros: usar predictor básico
+if len(upcoming_matches) >= 14:
+    basic_predictions = create_basic_predictions_for_quiniela(db, season)
+    return basic_predictions
+
+# SEGUNDO: Fallback a datos históricos si no hay suficientes futuros
+```
+
+**Características del Predictor Básico:**
+- **Ventaja Local**: 15% base para equipo local
+- **Factor Experiencia**: Basado en años desde fundación del club
+- **Factor Estadio**: Capacidad influye en apoyo local
+- **Factor Liga**: La Liga (1.0) vs Segunda División (0.7)
+- **Aleatoriedad**: 5% factor aleatorio para variedad realista
+
+**Archivos Nuevos Creados:**
+- `backend/app/ml/basic_predictor.py` - Sistema de predicciones heurísticas
+- `backend/app/config/quiniela_constants.py` - Constantes oficiales Quiniela
+
+**Testing Exitoso:**
+```bash
+curl -X GET "http://localhost:8000/quiniela/next-matches/2025"
+# ✅ Devuelve 15 predicciones para partidos de agosto 2025
+# ✅ Usa predictor básico con heurísticas
+# ✅ Formato compatible con dashboard
+```
+
+**Beneficios:**
+- ✅ **Funciona para inicio de temporada** sin datos históricos
+- ✅ **Predicciones realistas** basadas en características de equipos
+- ✅ **Formato consistente** con el resto del sistema
+- ✅ **Transparencia**: Indica método usado ("basic_predictor")
+
+**Casos de Uso:**
+- **Temporada Nueva (2025)**: Usa predictor básico para partidos agosto-septiembre
+- **Temporada Establecida**: Usa ML tradicional con datos históricos
+- **Transición**: Fallback automático entre métodos según disponibilidad
+
+### Validación de API-Football para Datos de Quiniela
+
+**Verificación Exitosa (2025-08-13):**
+- ✅ **API-Football proporciona datos de temporada 2025**
+- ✅ **21 partidos disponibles** para primera jornada (10 La Liga + 11 Segunda)
+- ✅ **Partidos empiezan viernes 15 agosto 2025**
+- ✅ **Datos incluyen**: fechas, equipos, ligas correctas
+
+**Scripts de Testing Creados:**
+- `simple_api_test.py` - Test básico de conectividad API
+- `test_quiniela_data.py` - Test específico disponibilidad Quiniela
+- `simple_quiniela_test.py` - Test próximos 7 días
+
+**Configuración API Validada:**
+```python
+# Headers correctos para API-Football
+headers = {
+    "X-RapidAPI-Host": "v3.football.api-sports.io", 
+    "X-RapidAPI-Key": API_KEY
+}
+
+# Ligas españolas confirmadas
+LA_LIGA = 140
+SEGUNDA_DIVISION = 141
+```
+
 ---
 
-**Última actualización**: 2024-08-12
-**Versión**: 1.0.0
+**Última actualización**: 2025-08-13
+**Versión**: 1.3.0
 **Maintainer**: Sistema Quiniela Predictor

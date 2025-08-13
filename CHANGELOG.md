@@ -1,5 +1,53 @@
 # 📋 Changelog - Quiniela Predictor
 
+## [1.3.0] - 2025-08-13 - Sistema de Predicciones Básicas + Reglas Oficiales de Quiniela
+
+### 🎯 Nuevas Características - Sistema de Predicciones Básicas
+
+- **🤖 BasicPredictor implementado** - Nuevo sistema heurístico en `backend/app/ml/basic_predictor.py`
+  - Predicciones para temporadas nuevas sin datos históricos ML
+  - Factores: ventaja local (15%), experiencia clubes, capacidad estadios, nivel liga
+  - Aleatoriedad controlada (5%) para variedad realista
+- **⚡ Soporte Temporada 2025** - Predicciones para partidos de agosto 2025 onwards
+- **🛡️ Validación Inteligente Temporadas** - Prevención de endpoints colgados
+  - Validación previa en todos los endpoints de actualización
+  - Mensajes informativos en lugar de background tasks innecesarios
+- **📊 API-Football 2025 Verificado** - Confirmado 21 partidos disponibles (10 La Liga + 11 Segunda)
+
+### 🎯 Nuevas Características - Reglas Oficiales (v1.2.1)
+- **📋 Nueva sección "Reglas Oficiales"** - Tab completa con información detallada sobre las modalidades oficiales
+- **💰 Precios oficiales implementados** - Sistema usa €0.75 por apuesta simple según normativa del Estado
+- **🏆 Pleno al 15 mejorado** - UI actualizada con explicaciones claras sobre las opciones 1, X, 2, M
+- **📊 Calculadora automática de costos** - Calcula automáticamente el costo total según número de apuestas
+- **📈 Modalidades documentadas** - Información completa sobre Simple, Múltiple, Reducidas y Elige 8
+- **🏅 Categorías de premios oficiales** - Documentación de todas las categorías (Especial, 1ª-5ª)
+
+### 🛠️ Mejoras Técnicas Críticas
+
+- **🔧 Endpoint Fix `/quiniela/next-matches/{season}`**:
+  - **ANTES**: Buscaba partidos completados (`Match.result.isnot(None)`) → Error 500 en temporadas nuevas
+  - **AHORA**: Prioriza partidos futuros (`Match.result.is_(None)`) → Predicciones exitosas
+  - **Lógica**: Futuros (BasicPredictor) → Históricos completados → Fallback temporada anterior
+- **⚡ Validación Previa en Endpoints de Actualización**:
+  - Previene background tasks innecesarios para temporadas futuras
+  - Devuelve mensajes informativos en lugar de timeouts
+  - Mejora experiencia usuario con feedback inmediato
+- **📊 Logging y Trazabilidad Mejorados**:
+  - Trazabilidad completa de decisiones y validaciones
+  - Debugging facilitado para desarrollo y troubleshooting
+
+### 🛠️ Mejoras de Sistema (v1.2.1)
+- **🔧 Constantes oficiales centralizadas** - Nuevo archivo `quiniela_constants.py` con todas las reglas BOE
+- **✅ Validación según normativa** - Sistema de validación basado en regulación oficial
+- **📱 UI más educativa** - Interfaz que enseña las reglas mientras se juega
+- **⚠️ Disclaimers legales** - Información sobre juego responsable y legalidad
+
+### 🐛 Correcciones Críticas
+- **❌ Error 500 en `/quiniela/next-matches/2025`**: **RESUELTO** - Endpoint buscaba partidos completados en lugar de futuros
+- **❌ Endpoints colgados temporadas futuras**: **RESUELTO** - Validación previa impide background tasks innecesarios
+- **❌ NameError dashboard.py**: **RESUELTO** - Variable `matches` corregida a `predictions['matches']`
+- **❌ Missing Submit Button Streamlit**: **RESUELTO** - Forms estructura corregida
+
 ## [1.2.0] - 2025-08-13 - Actualización a Temporada 2025 y Correcciones
 
 ### ✨ Nuevas Características

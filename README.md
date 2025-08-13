@@ -341,6 +341,50 @@ Acceder al dashboard en: `http://localhost:8501`
 - `POST /model/train` - Entrenar modelo
 - `GET /model/status` - Estado del modelo
 
+## ⚡ Desarrollo y Modificaciones
+
+### 🔄 Regla de Oro para Docker
+
+**IMPORTANTE**: Para que los cambios en el código se reflejen en la aplicación:
+
+```bash
+# SIEMPRE hacer rebuild sin caché después de cambios:
+docker-compose build --no-cache [service-name]
+docker-compose up -d [service-name]
+
+# Ejemplos específicos:
+docker-compose build --no-cache api      # Para cambios en backend/app/
+docker-compose build --no-cache dashboard # Para cambios en dashboard.py
+```
+
+**¿Por qué es necesario?**
+- Docker cachea las capas para acelerar builds
+- Un simple `restart` NO aplica cambios en archivos Python
+- Sin `--no-cache`, los cambios pueden no aparecer
+
+**Workflow recomendado:**
+1. 📝 Hacer cambios en código
+2. 🔨 `docker-compose build --no-cache [service]`
+3. 🚀 `docker-compose up -d [service]` 
+4. ✅ Verificar cambios en http://localhost:8501
+
+### 🚀 Scripts de Rebuild Rápido
+
+Para simplificar el proceso, usa los scripts incluidos:
+
+```bash
+# Linux/Mac
+./scripts/rebuild.sh [service]
+
+# Windows  
+scripts\rebuild.bat [service]
+
+# Ejemplos:
+./scripts/rebuild.sh api       # Solo API
+./scripts/rebuild.sh dashboard # Solo Dashboard
+./scripts/rebuild.sh           # Ambos servicios
+```
+
 ## 📚 Mejores Prácticas
 
 ### Entrenamiento del Modelo
@@ -414,11 +458,60 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 - [ ] Análisis de video con Computer Vision
 - [ ] Marketplace de modelos ML
 
+## 📝 Últimos Cambios
+
+### Versión 1.3.0 (2025-08-13) - Sistema de Predicciones Básicas
+
+**🎯 Nuevas Funcionalidades:**
+- ✅ **Predictor Básico Heurístico**: Sistema para temporadas nuevas sin datos históricos ML
+- ✅ **Soporte Temporada 2025**: Predicciones para partidos de agosto 2025 onwards
+- ✅ **Validación Inteligente de Temporadas**: Previene colgado en endpoints de actualización
+- ✅ **API-Football 2025 Verificado**: Confirmado soporte para nueva temporada
+
+**🔧 Mejoras Técnicas:**
+- **Endpoint Fix**: `/quiniela/next-matches/{season}` ahora busca partidos futuros primero
+- **Fallback Mejorado**: Lógica prioritaria (futuros → básico → históricos)
+- **Validación Previa**: Todos los endpoints de actualización validan temporadas
+- **Logging Mejorado**: Trazabilidad completa de decisiones del sistema
+
+**📁 Archivos Nuevos:**
+- `backend/app/ml/basic_predictor.py` - Sistema heurístico de predicciones
+- `backend/app/config/quiniela_constants.py` - Constantes oficiales Quiniela
+- `scripts/rebuild.sh` y `scripts/rebuild.bat` - Scripts de rebuild Docker
+- Tests API: `simple_api_test.py`, `test_quiniela_data.py`
+
+**🐛 Fixes Críticos:**
+- **Error 500 en predicciones 2025**: Resuelto con predictor básico
+- **Endpoints colgados**: Validación previa impide background tasks innecesarios
+- **Formato dashboard**: Compatibilidad entre predictor básico y ML tradicional
+
+**🧪 Testing Completado:**
+```bash
+# Confirmado funcionando
+curl -X GET "localhost:8000/quiniela/next-matches/2025"  # ✅ 15 predicciones
+curl -X POST "localhost:8000/data/update-teams/2025"     # ✅ Mensaje informativo
+```
+
+**📖 Documentación Actualizada:**
+- CONTEXT.md ampliado con troubleshooting Docker y validación temporadas
+- README.md con últimos cambios y procedimientos
+- Instrucciones rebuild con `--no-cache` para desarrollo
+
+---
+
+### Versión 1.2.1 (2025-08-12) - Reglas Oficiales Quiniela
+
+- ✅ **Implementación Reglas BOE**: Precios oficiales (€0.75), Pleno al 15, reducidas
+- ✅ **Dashboard Mejorado**: Tab "Reglas Oficiales" con normativa completa
+- ✅ **Fix Streamlit**: Corrección estructura forms y botones submit
+- ✅ **Documentación**: REGLAS_QUINIELA_IMPLEMENTACION.md completo
+
 ## 🆘 Soporte
 
 Para soporte y preguntas:
 - **Issues**: Usar GitHub Issues para bugs y features
-- **Documentación**: Wiki del proyecto
+- **Documentación**: Revisar CONTEXT.md para troubleshooting detallado
+- **Docker Issues**: Usar `docker-compose build --no-cache` para cambios
 - **Contacto**: [tu-email@ejemplo.com]
 
 ---
