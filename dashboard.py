@@ -108,19 +108,19 @@ def main():
     st.sidebar.title("Configuración")
     current_season = st.sidebar.selectbox("Temporada", [2025, 2024, 2023], index=0)
     
-    # Main navigation
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    # Main navigation - Reorganizado en 5 pestañas user-friendly
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🎯 Mi Quiniela", 
-        "📊 Predicciones Actuales", 
-        "📈 Rendimiento", 
-        "💰 Análisis Financiero",
-        "🔧 Gestión de Datos",
-        "🤖 Modelo ML",
-        "📋 Reglas Oficiales"
+        "📊 Análisis y Rendimiento", 
+        "🔧 Administración",
+        "📋 Información",
+        "⚙️ Configuración Avanzada"
     ])
     
+    # ====== TAB 1: MI QUINIELA ======
     with tab1:
         st.header("🎯 Mi Quiniela Personal")
+        st.info("🎯 **Descripción**: Crea, gestiona y actualiza tus quinielas personales con predicciones del sistema.")
         
         # Sub-tabs para diferentes funciones
         subtab1, subtab2, subtab3 = st.tabs(["📋 Próximos Partidos", "📊 Mi Historial", "✅ Actualizar Resultados"])
@@ -128,12 +128,88 @@ def main():
         with subtab1:
             st.subheader("Próximos Partidos con Predicciones Detalladas")
             
-            # Botón para actualizar datos y entrenar modelo
+            # Selección de configuración y botones
+            st.subheader("🎯 Selección de Partidos")
+            
+            # Cargar configuraciones disponibles
+            config_data = make_api_request(f"/quiniela/custom-config/list", {"season": current_season, "only_active": False})
+            available_configs = []
+            
+            if config_data and config_data.get('configs'):
+                available_configs = config_data['configs']
+            
+            # Selector de fuente de partidos
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                if available_configs:
+                    config_options = {"automático": "Sistema automático (próximos partidos)"}
+                    for config in available_configs:
+                        status = "🔴 Inactiva" if not config['is_active'] else "🔵 Activa"
+                        config_options[str(config['id'])] = f"{config['config_name']} ({status})"
+                    
+                    selected_source = st.selectbox(
+                        "📊 Fuente de partidos:",
+                        options=list(config_options.keys()),
+                        format_func=lambda x: config_options[x],
+                        index=0 if not available_configs else 1,  # Priorizar primera configuración si existe
+                        help="Elige qué partidos usar para generar tu quiniela"
+                    )
+                    
+                    # Mostrar detalles de la configuración seleccionada
+                    if selected_source != "automático":
+                        selected_config = next(c for c in available_configs if str(c['id']) == selected_source)
+                        col_info1, col_info2, col_info3 = st.columns(3)
+                        with col_info1:
+                            st.metric("🏆 La Liga", f"{selected_config['la_liga_count']} partidos")
+                        with col_info2:
+                            st.metric("🏅 Segunda Div.", f"{selected_config['segunda_count']} partidos")
+                        with col_info3:
+                            st.metric("📅 Semana", selected_config['week_number'])
+                        
+                        if not selected_config['is_active']:
+                            st.warning("⚠️ Esta configuración está marcada como inactiva")
+                else:
+                    st.info("💡 No hay configuraciones personalizadas. Ve a 'Configuración Avanzada' para crear una.")
+                    selected_source = "automático"
+            
+            with col2:
+                st.write("")  # Espaciado
+                st.write("")  # Espaciado
+                
+            # Botones para obtener predicciones y actualizar datos
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔄 Actualizar Datos", type="primary"):
-                    with st.spinner("Actualizando estadísticas..."):
+                if st.button("🎯 Obtener Predicciones", type="primary"):
+                    if available_configs and selected_source != "automático":
+                        # Usar configuración seleccionada
+                        config_id = selected_source
+                        selected_config = next(c for c in available_configs if str(c['id']) == config_id)
+                        
+                        with st.spinner(f"Generando predicciones desde: {selected_config['config_name']}..."):
+                            predictions_data = make_api_request(f"/quiniela/from-config/{config_id}")
+                            
+                            if predictions_data:
+                                st.session_state.current_predictions = predictions_data
+                                st.success(f"✅ {len(predictions_data['matches'])} partidos cargados desde: {selected_config['config_name']}")
+                            else:
+                                st.error("❌ Error al generar predicciones desde configuración personalizada")
+                    else:
+                        # Usar sistema automático
+                        with st.spinner("Generando predicciones automáticas..."):
+                            predictions_data = make_api_request(f"/quiniela/next-matches/{current_season}")
+                            
+                            if predictions_data:
+                                st.session_state.current_predictions = predictions_data
+                                st.success(f"✅ {len(predictions_data['matches'])} partidos cargados (sistema automático)")
+                                st.info("💡 Sugerencia: Ve a 'Configuración Avanzada' para crear configuraciones personalizadas")
+                            else:
+                                st.error("❌ Error al generar predicciones automáticas")
+            
+            with col2:
+                if st.button("🔄 Actualizar Datos"):
+                    with st.spinner("Actualizando estadísticas y entrenando modelo..."):
                         # Actualizar estadísticas
                         stats_result = make_api_request(f"/data/update-statistics/{current_season}", method="POST")
                         if stats_result:
@@ -143,15 +219,6 @@ def main():
                         train_result = make_api_request(f"/model/train?season={current_season}", method="POST")
                         if train_result:
                             st.success(f"✅ Modelo entrenado con {train_result.get('training_samples', 0)} muestras")
-            
-            with col2:
-                if st.button("🎯 Obtener Predicciones"):
-                    with st.spinner("Generando predicciones detalladas..."):
-                        predictions_data = make_api_request(f"/quiniela/next-matches/{current_season}")
-                        
-                        if predictions_data:
-                            st.session_state.current_predictions = predictions_data
-                            st.success(f"✅ {len(predictions_data['matches'])} partidos cargados")
             
             # Mostrar predicciones si están disponibles
             if 'current_predictions' in st.session_state:
@@ -258,16 +325,6 @@ def main():
                     
                     # Pleno al 15
                     st.write("---")
-                    st.write("### 🏆 Pleno al 15")
-                    st.write("*Predicción adicional para el partido 15. Se marca con X la casilla del resultado elegido.*")
-                    
-                    # Obtener datos del partido 15 si están disponibles
-                    if len(predictions['matches']) >= 15:
-                        partido_15 = predictions['matches'][14]  # Index 14 = partido 15
-                        st.write(f"**Partido 15**: {partido_15.get('home_team', 'Equipo A')} vs {partido_15.get('away_team', 'Equipo B')}")
-                    else:
-                        st.write("**Partido 15**: Equipo A vs Equipo B")
-                    
                     st.write("### 🏆 Pleno al 15 (Predicción de Goles)")
                     st.info("📝 **Reglas oficiales**: Debes predecir cuántos goles marcará cada equipo. Opciones: 0, 1, 2, o M (3 o más goles)")
                     
@@ -528,511 +585,536 @@ def main():
             else:
                 st.info("No se pudieron cargar los datos.")
 
+    # ====== TAB 2: ANÁLISIS Y RENDIMIENTO ======
     with tab2:
-        st.header("📊 Predicciones del Sistema")
+        st.header("📊 Análisis y Rendimiento")
+        st.info("📊 **Descripción**: Visualiza predicciones actuales, rendimiento histórico y análisis financiero detallado.")
         
-        # Get current predictions
-        predictions_data = make_api_request("/predictions/current-week", {"season": current_season})
+        # Sub-tabs para organizar contenido
+        analysis_tab1, analysis_tab2, analysis_tab3 = st.tabs([
+            "📊 Predicciones Actuales", 
+            "📈 Rendimiento Histórico", 
+            "💰 Análisis Financiero"
+        ])
         
-        if predictions_data and predictions_data.get('predictions'):
-            col1, col2, col3, col4 = st.columns(4)
+        with analysis_tab1:
+            st.subheader("📊 Predicciones del Sistema")
             
-            with col1:
-                st.metric("Temporada", predictions_data['season'])
+            # Get current predictions
+            predictions_data = make_api_request("/predictions/current-week", {"season": current_season})
             
-            with col2:
-                week_num = predictions_data.get('week_number') or 'N/A'
-                st.metric("Jornada", week_num)
-            
-            with col3:
-                # Calcular confianza media de forma segura
-                predictions = predictions_data['predictions']
-                if predictions and len(predictions) > 0:
-                    avg_confidence = sum(p.get('confidence', 0.5) for p in predictions) / len(predictions)
-                    st.metric("Confianza Media", f"{avg_confidence:.1%}")
-                else:
-                    st.metric("Confianza Media", "N/A")
-            
-            with col4:
-                st.metric("Versión Modelo", predictions_data.get('model_version', 'N/A'))
-            
-            st.subheader("Predicciones por Partido")
-            
-            # Display predictions
-            for prediction in predictions_data['predictions']:
-                display_prediction_card(prediction)
-            
-            # Betting strategy (si existe)
-            if 'betting_strategy' in predictions_data and predictions_data['betting_strategy']:
-                st.subheader("Estrategia de Apuestas Recomendada")
-                betting = predictions_data['betting_strategy']
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total a Apostar", f"€{betting.get('total_stake', 0):.2f}")
-                with col2:
-                    st.metric("Número de Apuestas", betting.get('number_of_bets', 0))
-                with col3:
-                    st.metric("% del Bankroll", f"{betting.get('percentage_of_bankroll', 0):.1f}%")
-                
-                if betting.get('recommended_bets'):
-                    st.subheader("Apuestas Recomendadas")
-                    bet_df = pd.DataFrame(betting['recommended_bets'])
-                    st.dataframe(bet_df[['match_number', 'home_team', 'away_team', 'predicted_result', 'confidence', 'recommended_bet']])
-            else:
-                st.info("💡 Estrategia de apuestas disponible cuando el modelo esté entrenado")
-        
-        else:
-            # Manejar casos donde no hay predicciones
-            if predictions_data:
-                if predictions_data.get('model_trained') == False:
-                    st.info("🤖 **Modelo no entrenado**")
-                    st.write("Para ver predicciones, primero necesitas entrenar el modelo:")
-                    st.write("1. Ve a la pestaña '🤖 Modelo ML'")
-                    st.write("2. Haz clic en 'Entrenar Nuevo Modelo'")
-                    st.write("3. Espera 10-15 minutos")
-                    st.write("4. ¡Regresa aquí para ver las predicciones!")
-                elif not predictions_data.get('predictions'):
-                    st.warning("📅 **No hay partidos disponibles**")
-                    st.write("No se encontraron partidos para mostrar predicciones.")
-                    st.write("Esto puede deberse a:")
-                    st.write("- No hay partidos próximos en la base de datos")
-                    st.write("- Necesitas actualizar los datos de partidos")
-                else:
-                    st.warning("⚠️ No se pudieron obtener las predicciones")
-            else:
-                st.error("❌ **Error de conexión**")
-                st.write("No se pudo conectar con la API. Verifica que los servicios estén funcionando.")
-
-    with tab3:
-        st.header("📈 Rendimiento Histórico")
-        
-        # Get historical data
-        history_data = make_api_request("/predictions/history", {"season": current_season, "limit": 20})
-        
-        if history_data:
-            # Create dataframe
-            df_history = pd.DataFrame([
-                {
-                    "Jornada": h['week_number'],
-                    "Precisión": h['accuracy'],
-                    "Aciertos": h['correct_predictions'],
-                    "Total": h['total_predictions'],
-                    "Beneficio": h['profit_loss'],
-                    "Completada": h['is_completed']
-                }
-                for h in history_data
-            ])
-            
-            if not df_history.empty:
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Accuracy over time
-                    fig_accuracy = px.line(df_history, x='Jornada', y='Precisión', 
-                                         title='Precisión por Jornada',
-                                         markers=True)
-                    fig_accuracy.update_layout(yaxis_tickformat='.1%')
-                    st.plotly_chart(fig_accuracy, use_container_width=True)
-                
-                with col2:
-                    # Profit/Loss over time
-                    fig_profit = px.bar(df_history, x='Jornada', y='Beneficio', 
-                                      title='Beneficio por Jornada',
-                                      color='Beneficio',
-                                      color_continuous_scale=['red', 'green'])
-                    st.plotly_chart(fig_profit, use_container_width=True)
-                
-                # Summary metrics
+            if predictions_data and predictions_data.get('predictions'):
                 col1, col2, col3, col4 = st.columns(4)
-                completed_weeks = df_history[df_history['Completada']]
                 
                 with col1:
-                    avg_accuracy = completed_weeks['Precisión'].mean() if not completed_weeks.empty else 0
-                    st.metric("Precisión Media", f"{avg_accuracy:.1%}")
+                    st.metric("Temporada", predictions_data['season'])
                 
                 with col2:
-                    total_profit = completed_weeks['Beneficio'].sum() if not completed_weeks.empty else 0
-                    st.metric("Beneficio Total", f"€{total_profit:.2f}")
+                    week_num = predictions_data.get('week_number') or 'N/A'
+                    st.metric("Jornada", week_num)
                 
                 with col3:
-                    best_week = completed_weeks['Precisión'].max() if not completed_weeks.empty else 0
-                    st.metric("Mejor Semana", f"{best_week:.1%}")
+                    # Calcular confianza media de forma segura
+                    predictions = predictions_data['predictions']
+                    if predictions and len(predictions) > 0:
+                        avg_confidence = sum(p.get('confidence', 0.5) for p in predictions) / len(predictions)
+                        st.metric("Confianza Media", f"{avg_confidence:.1%}")
+                    else:
+                        st.metric("Confianza Media", "N/A")
                 
                 with col4:
-                    total_weeks = len(completed_weeks)
-                    st.metric("Semanas Completadas", total_weeks)
+                    st.metric("Versión Modelo", predictions_data.get('model_version', 'N/A'))
                 
-                # Detailed table
-                st.subheader("Historial Detallado")
-                st.dataframe(df_history, use_container_width=True)
-        else:
-            st.info("No hay datos históricos disponibles.")
-    
-    with tab4:
-        st.header("💰 Análisis Financiero")
-        
-        financial_data = make_api_request("/analytics/financial-summary", {"season": current_season})
-        
-        if financial_data:
-            # Key metrics
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Total Apostado", f"€{financial_data['total_bet']:.2f}")
-            
-            with col2:
-                st.metric("Total Ganado", f"€{financial_data['total_winnings']:.2f}")
-            
-            with col3:
-                profit_color = "normal" if financial_data['total_profit'] >= 0 else "inverse"
-                st.metric("Beneficio Total", f"€{financial_data['total_profit']:.2f}")
-            
-            with col4:
-                roi_color = "normal" if financial_data['roi_percentage'] >= 0 else "inverse"
-                st.metric("ROI", f"{financial_data['roi_percentage']:.1f}%")
-            
-            # Weekly performance chart
-            if financial_data['weekly_performance']:
-                df_weekly = pd.DataFrame(financial_data['weekly_performance'])
+                st.subheader("Predicciones por Partido")
                 
-                col1, col2 = st.columns(2)
+                # Display predictions
+                for prediction in predictions_data['predictions']:
+                    display_prediction_card(prediction)
+                
+                # Betting strategy (si existe)
+                if 'betting_strategy' in predictions_data and predictions_data['betting_strategy']:
+                    st.subheader("Estrategia de Apuestas Recomendada")
+                    betting = predictions_data['betting_strategy']
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total a Apostar", f"€{betting.get('total_stake', 0):.2f}")
+                    with col2:
+                        st.metric("Número de Apuestas", betting.get('number_of_bets', 0))
+                    with col3:
+                        st.metric("% del Bankroll", f"{betting.get('percentage_of_bankroll', 0):.1f}%")
+                    
+                    if betting.get('recommended_bets'):
+                        st.subheader("Apuestas Recomendadas")
+                        bet_df = pd.DataFrame(betting['recommended_bets'])
+                        st.dataframe(bet_df[['match_number', 'home_team', 'away_team', 'predicted_result', 'confidence', 'recommended_bet']])
+                else:
+                    st.info("💡 Estrategia de apuestas disponible cuando el modelo esté entrenado")
+            
+            else:
+                # Manejar casos donde no hay predicciones
+                if predictions_data:
+                    if predictions_data.get('model_trained') == False:
+                        st.info("🤖 **Modelo no entrenado**")
+                        st.write("Para ver predicciones, primero necesitas entrenar el modelo:")
+                        st.write("1. Ve a la pestaña '🔧 Administración'")
+                        st.write("2. Haz clic en 'Entrenar Nuevo Modelo'")
+                        st.write("3. Espera 10-15 minutos")
+                        st.write("4. ¡Regresa aquí para ver las predicciones!")
+                    elif not predictions_data.get('predictions'):
+                        st.warning("📅 **No hay partidos disponibles**")
+                        st.write("No se encontraron partidos para mostrar predicciones.")
+                        st.write("Esto puede deberse a:")
+                        st.write("- No hay partidos próximos en la base de datos")
+                        st.write("- Necesitas actualizar los datos de partidos")
+                    else:
+                        st.warning("⚠️ No se pudieron obtener las predicciones")
+                else:
+                    st.error("❌ **Error de conexión**")
+                    st.write("No se pudo conectar con la API. Verifica que los servicios estén funcionando.")
+
+        with analysis_tab2:
+            st.subheader("📈 Rendimiento Histórico")
+            
+            # Get historical data
+            history_data = make_api_request("/predictions/history", {"season": current_season, "limit": 20})
+            
+            if history_data:
+                # Create dataframe
+                df_history = pd.DataFrame([
+                    {
+                        "Jornada": h['week_number'],
+                        "Precisión": h['accuracy'],
+                        "Aciertos": h['correct_predictions'],
+                        "Total": h['total_predictions'],
+                        "Beneficio": h['profit_loss'],
+                        "Completada": h['is_completed']
+                    }
+                    for h in history_data
+                ])
+                
+                if not df_history.empty:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Accuracy over time
+                        fig_accuracy = px.line(df_history, x='Jornada', y='Precisión', 
+                                             title='Precisión por Jornada',
+                                             markers=True)
+                        fig_accuracy.update_layout(yaxis_tickformat='.1%')
+                        st.plotly_chart(fig_accuracy, use_container_width=True)
+                    
+                    with col2:
+                        # Profit/Loss over time
+                        fig_profit = px.bar(df_history, x='Jornada', y='Beneficio', 
+                                          title='Beneficio por Jornada',
+                                          color='Beneficio',
+                                          color_continuous_scale=['red', 'green'])
+                        st.plotly_chart(fig_profit, use_container_width=True)
+                    
+                    # Summary metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    completed_weeks = df_history[df_history['Completada']]
+                    
+                    with col1:
+                        avg_accuracy = completed_weeks['Precisión'].mean() if not completed_weeks.empty else 0
+                        st.metric("Precisión Media", f"{avg_accuracy:.1%}")
+                    
+                    with col2:
+                        total_profit = completed_weeks['Beneficio'].sum() if not completed_weeks.empty else 0
+                        st.metric("Beneficio Total", f"€{total_profit:.2f}")
+                    
+                    with col3:
+                        best_week = completed_weeks['Precisión'].max() if not completed_weeks.empty else 0
+                        st.metric("Mejor Semana", f"{best_week:.1%}")
+                    
+                    with col4:
+                        total_weeks = len(completed_weeks)
+                        st.metric("Semanas Completadas", total_weeks)
+                    
+                    # Detailed table
+                    st.subheader("Historial Detallado")
+                    st.dataframe(df_history, use_container_width=True)
+            else:
+                st.info("No hay datos históricos disponibles.")
+
+        with analysis_tab3:
+            st.subheader("💰 Análisis Financiero")
+            
+            financial_data = make_api_request("/analytics/financial-summary", {"season": current_season})
+            
+            if financial_data:
+                # Key metrics
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    # Cumulative profit
-                    df_weekly['Beneficio_Acumulado'] = df_weekly['profit_loss'].cumsum()
-                    fig_cumulative = px.line(df_weekly, x='week_number', y='Beneficio_Acumulado',
-                                           title='Beneficio Acumulado por Semana',
-                                           markers=True)
-                    fig_cumulative.update_traces(line_color='green')
-                    st.plotly_chart(fig_cumulative, use_container_width=True)
+                    st.metric("Total Apostado", f"€{financial_data['total_bet']:.2f}")
                 
                 with col2:
-                    # Weekly ROI
-                    df_weekly['ROI_Semanal'] = (df_weekly['profit_loss'] / df_weekly['bet_amount'] * 100).fillna(0)
-                    fig_roi = px.bar(df_weekly, x='week_number', y='ROI_Semanal',
-                                   title='ROI Semanal (%)',
-                                   color='ROI_Semanal',
-                                   color_continuous_scale=['red', 'green'])
-                    st.plotly_chart(fig_roi, use_container_width=True)
+                    st.metric("Total Ganado", f"€{financial_data['total_winnings']:.2f}")
                 
-                # Performance table
-                st.subheader("Rendimiento Semanal Detallado")
-                st.dataframe(df_weekly[['week_number', 'bet_amount', 'winnings', 'profit_loss', 'accuracy']], 
-                           use_container_width=True)
-        else:
-            st.info("No hay datos financieros disponibles.")
-    
-    with tab5:
-        st.header("🔧 Gestión de Datos")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("Actualizar Datos")
-            
-            st.write("**Actualizar datos de la temporada:**")
-            
-            # Función para monitorear progreso
-            def monitor_update_progress(update_type, initial_count, expected_count, check_field):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+                with col3:
+                    profit_color = "normal" if financial_data['total_profit'] >= 0 else "inverse"
+                    st.metric("Beneficio Total", f"€{financial_data['total_profit']:.2f}")
                 
-                import time
-                for i in range(30):  # Máximo 30 iteraciones (5 minutos)
-                    time.sleep(10)  # Esperar 10 segundos entre checks
+                with col4:
+                    roi_color = "normal" if financial_data['roi_percentage'] >= 0 else "inverse"
+                    st.metric("ROI", f"{financial_data['roi_percentage']:.1f}%")
+                
+                # Weekly performance chart
+                if financial_data['weekly_performance']:
+                    df_weekly = pd.DataFrame(financial_data['weekly_performance'])
                     
-                    # Obtener estado actual
-                    current_status = make_api_request(f"/data/status/{current_season}")
-                    if current_status:
-                        current_count = current_status.get(check_field, initial_count)
-                        
-                        # Calcular progreso con límite máximo de 1.0
-                        if expected_count <= initial_count:
-                            progress = 1.0 if current_count > initial_count else 0.0
-                        else:
-                            progress = min((current_count - initial_count) / (expected_count - initial_count), 1.0)
-                        
-                        progress_bar.progress(max(0.0, progress))  # Asegurar que no sea negativo
-                        
-                        # Determinar si está completo
-                        is_complete = (current_count >= expected_count) or (progress >= 1.0) or (current_count > initial_count and i > 3)
-                        
-                        if is_complete:
-                            status_text.success(f"✅ Actualización de {update_type} completada! ({current_count} registros)")
-                            progress_bar.progress(1.0)
-                            break
-                        else:
-                            status_text.info(f"⏳ Actualizando {update_type}... ({current_count} registros)")
-                    else:
-                        status_text.warning("⚠️ No se pudo verificar el progreso")
-                        break
-                
-                return current_count if current_status else initial_count
-            
-            if st.button("🏈 Actualizar Equipos", type="primary", key="btn_teams"):
-                # Obtener estado inicial
-                initial_status = make_api_request(f"/data/status/{current_season}")
-                initial_teams = initial_status.get('teams_total', 0) if initial_status else 0
-                
-                # Iniciar actualización
-                result = make_api_request(f"/data/update-teams/{current_season}", method="POST")
-                if result:
-                    st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                    col1, col2 = st.columns(2)
                     
-                    # Monitorear progreso
-                    with st.container():
-                        st.write("**Monitoreando progreso:**")
-                        monitor_update_progress("equipos", initial_teams, 40, "teams_total")
-                else:
-                    st.error("❌ Error al iniciar actualización de equipos")
-            
-            if st.button("⚽ Actualizar Partidos", key="btn_matches"):
-                # Obtener estado inicial
-                initial_status = make_api_request(f"/data/status/{current_season}")
-                initial_matches = initial_status.get('matches_total', 0) if initial_status else 0
-                
-                # Iniciar actualización
-                result = make_api_request(f"/data/update-matches/{current_season}", method="POST")
-                if result:
-                    # Check if this is a validation response
-                    if 'warning' in result and 'recommendation' in result:
-                        # This is a validation message, not a successful start
-                        st.warning(f"⚠️ {result.get('message', 'Validación')}")
-                        if result.get('warning'):
-                            st.info(f"ℹ️ {result['warning']}")
-                        if result.get('recommendation'):
-                            st.info(f"💡 {result['recommendation']}")
-                    else:
-                        # This is a successful start, monitor progress
-                        st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
-                        
-                        # Monitorear progreso
-                        with st.container():
-                            st.write("**Monitoreando progreso:**")
-                            monitor_update_progress("partidos", initial_matches, 760, "matches_total")
-                else:
-                    st.error("❌ Error al iniciar actualización de partidos")
-            
-            if st.button("📊 Actualizar Estadísticas", key="btn_stats"):
-                # Obtener estado inicial
-                initial_status = make_api_request(f"/data/status/{current_season}")
-                initial_stats = initial_status.get('team_statistics_total', 0) if initial_status else 0
-                
-                # Iniciar actualización
-                result = make_api_request(f"/data/update-statistics/{current_season}", method="POST")
-                if result:
-                    # Check if this is a validation response
-                    if 'warning' in result and 'recommendation' in result:
-                        # This is a validation message, not a successful start
-                        st.warning(f"⚠️ {result.get('message', 'Validación')}")
-                        if result.get('warning'):
-                            st.info(f"ℹ️ {result['warning']}")
-                        if result.get('recommendation'):
-                            st.info(f"💡 {result['recommendation']}")
-                    else:
-                        # This is a successful start, monitor progress
-                        st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
-                        
-                        # Monitorear progreso
-                        with st.container():
-                            st.write("**Monitoreando progreso:**")
-                            monitor_update_progress("estadísticas", initial_stats, 40, "team_statistics_total")
-                else:
-                    st.error("❌ Error al iniciar actualización de estadísticas")
-        
-        with col2:
-            st.subheader("Estado de los Datos")
-            
-            # Botón para refrescar estado
-            if st.button("🔄 Refrescar Estado", key="btn_refresh"):
-                st.rerun()
-            
-            # Obtener estado actual de los datos
-            status_data = make_api_request(f"/data/status/{current_season}")
-            
-            if status_data:
-                # Métricas principales
-                col2_1, col2_2 = st.columns(2)
-                
-                with col2_1:
-                    teams_progress = min(status_data['teams_total'] / max(status_data['teams_expected'], 1), 1.0)
-                    st.metric(
-                        "Equipos", 
-                        f"{status_data['teams_total']}/{status_data['teams_expected']}", 
-                        delta="✅ Completo" if status_data['teams_total'] >= status_data['teams_expected'] else f"{teams_progress:.1%} completo"
-                    )
+                    with col1:
+                        # Cumulative profit
+                        df_weekly['Beneficio_Acumulado'] = df_weekly['profit_loss'].cumsum()
+                        fig_cumulative = px.line(df_weekly, x='week_number', y='Beneficio_Acumulado',
+                                               title='Beneficio Acumulado por Semana',
+                                               markers=True)
+                        fig_cumulative.update_traces(line_color='green')
+                        st.plotly_chart(fig_cumulative, use_container_width=True)
                     
-                    matches_progress = min(status_data['matches_total'] / max(status_data['matches_expected_per_season'], 1), 1.0) if status_data['matches_expected_per_season'] > 0 else 0
-                    st.metric(
-                        "Partidos", 
-                        f"{status_data['matches_total']}", 
-                        delta=f"{status_data['matches_total']} cargados"
-                    )
-                
-                with col2_2:
-                    st.metric(
-                        "Partidos c/Resultados", 
-                        f"{status_data['matches_with_results']}"
-                    )
+                    with col2:
+                        # Weekly ROI
+                        df_weekly['ROI_Semanal'] = (df_weekly['profit_loss'] / df_weekly['bet_amount'] * 100).fillna(0)
+                        fig_roi = px.bar(df_weekly, x='week_number', y='ROI_Semanal',
+                                       title='ROI Semanal (%)',
+                                       color='ROI_Semanal',
+                                       color_continuous_scale=['red', 'green'])
+                        st.plotly_chart(fig_roi, use_container_width=True)
                     
-                    stats_progress = min(status_data['team_statistics_total'] / max(status_data['stats_expected'], 1), 1.0) if status_data['stats_expected'] > 0 else 0
-                    st.metric(
-                        "Estadísticas", 
-                        f"{status_data['team_statistics_total']}/{status_data['stats_expected']}", 
-                        delta="✅ Completo" if status_data['team_statistics_total'] >= status_data['stats_expected'] else f"{stats_progress:.1%} completo"
-                    )
-                
-                # Barras de progreso visuales
-                st.write("**Progreso de Datos:**")
-                
-                st.write("Equipos:")
-                st.progress(teams_progress)
-                
-                st.write("Estadísticas:")
-                st.progress(stats_progress)
-                
-                # Fechas de última actualización
-                if status_data['last_match_update']:
-                    from datetime import datetime
-                    last_update = datetime.fromisoformat(status_data['last_match_update'].replace('Z', '+00:00'))
-                    st.write(f"**Última actualización partidos:** {last_update.strftime('%Y-%m-%d %H:%M')}")
-                
-                if status_data['last_stats_update']:
-                    last_stats = datetime.fromisoformat(status_data['last_stats_update'].replace('Z', '+00:00'))
-                    st.write(f"**Última actualización estadísticas:** {last_stats.strftime('%Y-%m-%d %H:%M')}")
-                
+                    # Performance table
+                    st.subheader("Rendimiento Semanal Detallado")
+                    st.dataframe(df_weekly[['week_number', 'bet_amount', 'winnings', 'profit_loss', 'accuracy']], 
+                               use_container_width=True)
             else:
-                st.warning("⚠️ No se pudo obtener el estado de los datos")
-                st.info("Asegúrate de que la API esté funcionando correctamente")
-            
-            # Sección de borrar datos
-            st.markdown("---")
-            st.subheader("🗑️ Borrar Datos del Sistema")
-            st.warning("⚠️ Esta acción eliminará equipos, partidos y estadísticas")
-            
-            with st.expander("🗑️ Borrar datos del sistema"):
-                st.markdown("""
-                **Esta acción eliminará:**
-                - 👥 Todos los equipos
-                - ⚽ Todos los partidos y resultados
-                - 📊 Todas las estadísticas de equipos
-                
-                **✅ Se preservan:**
-                - 🎯 Tus quinielas personales
-                - 📈 Tu historial de predicciones
-                
-                **⚠️ ESTA ACCIÓN NO SE PUEDE DESHACER ⚠️**
-                """)
-                
-                # Requerir confirmación explícita
-                confirm_delete = st.text_input(
-                    "Para confirmar, escribe: BORRAR_DATOS",
-                    placeholder="Escribe BORRAR_DATOS para confirmar",
-                    key="confirm_delete_input"
-                )
-                
-                col_btn1, col_btn2 = st.columns(2)
-                
-                with col_btn1:
-                    delete_enabled = confirm_delete == "BORRAR_DATOS"
-                    
-                    if st.button(
-                        "🗑️ BORRAR DATOS DEL SISTEMA", 
-                        type="primary" if delete_enabled else "secondary",
-                        disabled=not delete_enabled,
-                        key="btn_delete_data"
-                    ):
-                        if delete_enabled:
-                            with st.spinner("🗑️ Borrando equipos, partidos y estadísticas..."):
-                                # Llamar al endpoint de borrar datos
-                                result = make_api_request(
-                                    "/data/clear-statistics?confirm=DELETE_STATISTICS", 
-                                    method="DELETE"
-                                )
-                                
-                                if result:
-                                    st.success("✅ Los datos del sistema han sido borrados exitosamente")
-                                    
-                                    # Mostrar resumen de lo que se borró
-                                    if 'records_deleted' in result:
-                                        deleted = result['records_deleted']
-                                        st.info(f"""
-                                        **Registros eliminados:**
-                                        - 👥 Equipos: {deleted.get('teams', 0)}
-                                        - ⚽ Partidos: {deleted.get('matches', 0)}  
-                                        - 📊 Estadísticas: {deleted.get('statistics', 0)}
-                                        """)
-                                    
-                                    # Mostrar próximos pasos
-                                    if 'next_steps' in result:
-                                        st.info("**Próximos pasos recomendados:**")
-                                        for step in result['next_steps']:
-                                            st.write(f"• {step}")
-                                    
-                                    # Refrescar la página
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error al borrar los datos")
-                        else:
-                            st.error("⚠️ Debes escribir 'BORRAR_DATOS' para confirmar")
-                
-                with col_btn2:
-                    st.write("")  # Espaciado
-                    if st.button("❌ Cancelar", key="btn_cancel_delete"):
-                        st.rerun()
+                st.info("No hay datos financieros disponibles.")
     
-    with tab6:
-        st.header("🤖 Gestión del Modelo de Machine Learning")
+    # ====== TAB 3: ADMINISTRACIÓN ======
+    with tab3:
+        st.header("🔧 Administración")
+        st.info("🔧 **Descripción**: Gestiona datos del sistema, entrena modelos ML y administra la base de datos.")
         
-        col1, col2 = st.columns(2)
+        # Sub-tabs para administración
+        admin_tab1, admin_tab2 = st.tabs([
+            "🔧 Gestión de Datos", 
+            "🤖 Modelo ML"
+        ])
         
-        with col1:
-            st.subheader("Estado del Modelo")
+        with admin_tab1:
+            st.subheader("🔧 Gestión de Datos")
             
-            model_data = make_api_request("/analytics/model-performance")
+            col1, col2 = st.columns(2)
             
-            if model_data:
-                st.metric("Modelo Entrenado", "✅ Sí" if model_data['is_trained'] else "❌ No")
-                st.metric("Versión", model_data.get('model_version', 'N/A'))
-                st.metric("Características", model_data['feature_count'])
+            with col1:
+                st.subheader("Actualizar Datos")
                 
-                # Feature importance
-                if model_data.get('feature_importance'):
-                    st.subheader("Importancia de Características")
-                    df_features = pd.DataFrame(model_data['feature_importance'])
+                st.write("**Actualizar datos de la temporada:**")
+                
+                # Función para monitorear progreso
+                def monitor_update_progress(update_type, initial_count, expected_count, check_field):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
-                    fig_features = px.bar(df_features.head(10), 
-                                        x='importance', y='feature',
-                                        orientation='h',
-                                        title='Top 10 Características Más Importantes')
-                    fig_features.update_layout(yaxis={'categoryorder':'total ascending'})
-                    st.plotly_chart(fig_features, use_container_width=True)
-        
-        with col2:
-            st.subheader("Entrenar Modelo")
-            
-            if st.button("Entrenar Nuevo Modelo", type="primary"):
-                with st.spinner("Entrenando modelo... Esto puede tomar varios minutos."):
-                    # Llamar al endpoint con season como query parameter
-                    result = make_api_request(f"/model/train?season={current_season}", method="POST")
+                    import time
+                    for i in range(30):  # Máximo 30 iteraciones (5 minutos)
+                        time.sleep(10)  # Esperar 10 segundos entre checks
+                        
+                        # Obtener estado actual
+                        current_status = make_api_request(f"/data/status/{current_season}")
+                        if current_status:
+                            current_count = current_status.get(check_field, initial_count)
+                            
+                            # Calcular progreso con límite máximo de 1.0
+                            if expected_count <= initial_count:
+                                progress = 1.0 if current_count > initial_count else 0.0
+                            else:
+                                progress = min((current_count - initial_count) / (expected_count - initial_count), 1.0)
+                            
+                            progress_bar.progress(max(0.0, progress))  # Asegurar que no sea negativo
+                            
+                            # Determinar si está completo
+                            is_complete = (current_count >= expected_count) or (progress >= 1.0) or (current_count > initial_count and i > 3)
+                            
+                            if is_complete:
+                                status_text.success(f"✅ Actualización de {update_type} completada! ({current_count} registros)")
+                                progress_bar.progress(1.0)
+                                break
+                            else:
+                                status_text.info(f"⏳ Actualizando {update_type}... ({current_count} registros)")
+                        else:
+                            status_text.warning("⚠️ No se pudo verificar el progreso")
+                            break
+                    
+                    return current_count if current_status else initial_count
+                
+                if st.button("🏈 Actualizar Equipos", type="primary", key="btn_teams"):
+                    # Obtener estado inicial
+                    initial_status = make_api_request(f"/data/status/{current_season}")
+                    initial_teams = initial_status.get('teams_total', 0) if initial_status else 0
+                    
+                    # Iniciar actualización
+                    result = make_api_request(f"/data/update-teams/{current_season}", method="POST")
                     if result:
-                        st.success(f"✅ Entrenamiento iniciado con {result.get('training_samples', 'N/A')} muestras")
-                        st.info("⏳ El entrenamiento se ejecuta en segundo plano. Actualiza la página en unos minutos.")
+                        st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                        
+                        # Monitorear progreso
+                        with st.container():
+                            st.write("**Monitoreando progreso:**")
+                            monitor_update_progress("equipos", initial_teams, 40, "teams_total")
                     else:
-                        st.error("❌ Error al iniciar el entrenamiento del modelo")
+                        st.error("❌ Error al iniciar actualización de equipos")
+                
+                if st.button("⚽ Actualizar Partidos", key="btn_matches"):
+                    # Obtener estado inicial
+                    initial_status = make_api_request(f"/data/status/{current_season}")
+                    initial_matches = initial_status.get('matches_total', 0) if initial_status else 0
+                    
+                    # Iniciar actualización
+                    result = make_api_request(f"/data/update-matches/{current_season}", method="POST")
+                    if result:
+                        # Check if this is a validation response
+                        if 'warning' in result and 'recommendation' in result:
+                            # This is a validation message, not a successful start
+                            st.warning(f"⚠️ {result.get('message', 'Validación')}")
+                            if result.get('warning'):
+                                st.info(f"ℹ️ {result['warning']}")
+                            if result.get('recommendation'):
+                                st.info(f"💡 {result['recommendation']}")
+                        else:
+                            # This is a successful start, monitor progress
+                            st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                            
+                            # Monitorear progreso
+                            with st.container():
+                                st.write("**Monitoreando progreso:**")
+                                monitor_update_progress("partidos", initial_matches, 760, "matches_total")
+                    else:
+                        st.error("❌ Error al iniciar actualización de partidos")
+                
+                if st.button("📊 Actualizar Estadísticas", key="btn_stats"):
+                    # Obtener estado inicial
+                    initial_status = make_api_request(f"/data/status/{current_season}")
+                    initial_stats = initial_status.get('team_statistics_total', 0) if initial_status else 0
+                    
+                    # Iniciar actualización
+                    result = make_api_request(f"/data/update-statistics/{current_season}", method="POST")
+                    if result:
+                        # Check if this is a validation response
+                        if 'warning' in result and 'recommendation' in result:
+                            # This is a validation message, not a successful start
+                            st.warning(f"⚠️ {result.get('message', 'Validación')}")
+                            if result.get('warning'):
+                                st.info(f"ℹ️ {result['warning']}")
+                            if result.get('recommendation'):
+                                st.info(f"💡 {result['recommendation']}")
+                        else:
+                            # This is a successful start, monitor progress
+                            st.info(f"🚀 {result.get('message', 'Actualización iniciada')}")
+                            
+                            # Monitorear progreso
+                            with st.container():
+                                st.write("**Monitoreando progreso:**")
+                                monitor_update_progress("estadísticas", initial_stats, 40, "team_statistics_total")
+                    else:
+                        st.error("❌ Error al iniciar actualización de estadísticas")
             
-            st.subheader("Configuración del Modelo")
-            st.info("Configuración actual:")
-            st.code("""
+            with col2:
+                st.subheader("Estado de los Datos")
+                
+                # Botón para refrescar estado
+                if st.button("🔄 Refrescar Estado", key="btn_refresh"):
+                    st.rerun()
+                
+                # Obtener estado actual de los datos
+                status_data = make_api_request(f"/data/status/{current_season}")
+                
+                if status_data:
+                    # Métricas principales
+                    col2_1, col2_2 = st.columns(2)
+                    
+                    with col2_1:
+                        teams_progress = min(status_data['teams_total'] / max(status_data['teams_expected'], 1), 1.0)
+                        st.metric(
+                            "Equipos", 
+                            f"{status_data['teams_total']}/{status_data['teams_expected']}", 
+                            delta="✅ Completo" if status_data['teams_total'] >= status_data['teams_expected'] else f"{teams_progress:.1%} completo"
+                        )
+                        
+                        matches_progress = min(status_data['matches_total'] / max(status_data['matches_expected_per_season'], 1), 1.0) if status_data['matches_expected_per_season'] > 0 else 0
+                        st.metric(
+                            "Partidos", 
+                            f"{status_data['matches_total']}", 
+                            delta=f"{status_data['matches_total']} cargados"
+                        )
+                    
+                    with col2_2:
+                        st.metric(
+                            "Partidos c/Resultados", 
+                            f"{status_data['matches_with_results']}"
+                        )
+                        
+                        stats_progress = min(status_data['team_statistics_total'] / max(status_data['stats_expected'], 1), 1.0) if status_data['stats_expected'] > 0 else 0
+                        st.metric(
+                            "Estadísticas", 
+                            f"{status_data['team_statistics_total']}/{status_data['stats_expected']}", 
+                            delta="✅ Completo" if status_data['team_statistics_total'] >= status_data['stats_expected'] else f"{stats_progress:.1%} completo"
+                        )
+                    
+                    # Barras de progreso visuales
+                    st.write("**Progreso de Datos:**")
+                    
+                    st.write("Equipos:")
+                    st.progress(teams_progress)
+                    
+                    st.write("Estadísticas:")
+                    st.progress(stats_progress)
+                    
+                    # Fechas de última actualización
+                    if status_data['last_match_update']:
+                        from datetime import datetime
+                        last_update = datetime.fromisoformat(status_data['last_match_update'].replace('Z', '+00:00'))
+                        st.write(f"**Última actualización partidos:** {last_update.strftime('%Y-%m-%d %H:%M')}")
+                    
+                    if status_data['last_stats_update']:
+                        last_stats = datetime.fromisoformat(status_data['last_stats_update'].replace('Z', '+00:00'))
+                        st.write(f"**Última actualización estadísticas:** {last_stats.strftime('%Y-%m-%d %H:%M')}")
+                    
+                else:
+                    st.warning("⚠️ No se pudo obtener el estado de los datos")
+                    st.info("Asegúrate de que la API esté funcionando correctamente")
+                
+                # Sección de borrar datos
+                st.markdown("---")
+                st.subheader("🗑️ Borrar Datos del Sistema")
+                st.warning("⚠️ Esta acción eliminará equipos, partidos y estadísticas")
+                
+                with st.expander("🗑️ Borrar datos del sistema"):
+                    st.markdown("""
+                    **Esta acción eliminará:**
+                    - 👥 Todos los equipos
+                    - ⚽ Todos los partidos y resultados
+                    - 📊 Todas las estadísticas de equipos
+                    
+                    **✅ Se preservan:**
+                    - 🎯 Tus quinielas personales
+                    - 📈 Tu historial de predicciones
+                    
+                    **⚠️ ESTA ACCIÓN NO SE PUEDE DESHACER ⚠️**
+                    """)
+                    
+                    # Requerir confirmación explícita
+                    confirm_delete = st.text_input(
+                        "Para confirmar, escribe: BORRAR_DATOS",
+                        placeholder="Escribe BORRAR_DATOS para confirmar",
+                        key="confirm_delete_input"
+                    )
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        delete_enabled = confirm_delete == "BORRAR_DATOS"
+                        
+                        if st.button(
+                            "🗑️ BORRAR DATOS DEL SISTEMA", 
+                            type="primary" if delete_enabled else "secondary",
+                            disabled=not delete_enabled,
+                            key="btn_delete_data"
+                        ):
+                            if delete_enabled:
+                                with st.spinner("🗑️ Borrando equipos, partidos y estadísticas..."):
+                                    # Llamar al endpoint de borrar datos
+                                    result = make_api_request(
+                                        "/data/clear-statistics?confirm=DELETE_STATISTICS", 
+                                        method="DELETE"
+                                    )
+                                    
+                                    if result:
+                                        st.success("✅ Los datos del sistema han sido borrados exitosamente")
+                                        
+                                        # Mostrar resumen de lo que se borró
+                                        if 'records_deleted' in result:
+                                            deleted = result['records_deleted']
+                                            st.info(f"""
+                                            **Registros eliminados:**
+                                            - 👥 Equipos: {deleted.get('teams', 0)}
+                                            - ⚽ Partidos: {deleted.get('matches', 0)}  
+                                            - 📊 Estadísticas: {deleted.get('statistics', 0)}
+                                            """)
+                                        
+                                        # Mostrar próximos pasos
+                                        if 'next_steps' in result:
+                                            st.info("**Próximos pasos recomendados:**")
+                                            for step in result['next_steps']:
+                                                st.write(f"• {step}")
+                                        
+                                        # Refrescar la página
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Error al borrar los datos")
+                            else:
+                                st.error("⚠️ Debes escribir 'BORRAR_DATOS' para confirmar")
+                    
+                    with col_btn2:
+                        st.write("")  # Espaciado
+                        if st.button("❌ Cancelar", key="btn_cancel_delete"):
+                            st.rerun()
+
+        with admin_tab2:
+            st.subheader("🤖 Gestión del Modelo de Machine Learning")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Estado del Modelo")
+                
+                model_data = make_api_request("/analytics/model-performance")
+                
+                if model_data:
+                    st.metric("Modelo Entrenado", "✅ Sí" if model_data['is_trained'] else "❌ No")
+                    st.metric("Versión", model_data.get('model_version', 'N/A'))
+                    st.metric("Características", model_data['feature_count'])
+                    
+                    # Feature importance
+                    if model_data.get('feature_importance'):
+                        st.subheader("Importancia de Características")
+                        df_features = pd.DataFrame(model_data['feature_importance'])
+                        
+                        fig_features = px.bar(df_features.head(10), 
+                                            x='importance', y='feature',
+                                            orientation='h',
+                                            title='Top 10 Características Más Importantes')
+                        fig_features.update_layout(yaxis={'categoryorder':'total ascending'})
+                        st.plotly_chart(fig_features, use_container_width=True)
+            
+            with col2:
+                st.subheader("Entrenar Modelo")
+                
+                if st.button("Entrenar Nuevo Modelo", type="primary"):
+                    with st.spinner("Entrenando modelo... Esto puede tomar varios minutos."):
+                        # Llamar al endpoint con season como query parameter
+                        result = make_api_request(f"/model/train?season={current_season}", method="POST")
+                        if result:
+                            st.success(f"✅ Entrenamiento iniciado con {result.get('training_samples', 'N/A')} muestras")
+                            st.info("⏳ El entrenamiento se ejecuta en segundo plano. Actualiza la página en unos minutos.")
+                        else:
+                            st.error("❌ Error al iniciar el entrenamiento del modelo")
+                
+                st.subheader("Configuración del Modelo")
+                st.info("Configuración actual:")
+                st.code("""
 Algoritmos: Random Forest + XGBoost (Ensemble)
 Características: ~30 variables
 Validación: 5-fold cross-validation
 Métricas: Accuracy, Precision, Recall, F1-Score
-            """)
+                """)
 
-    with tab7:
-        st.header("📋 Reglas Oficiales de la Quiniela Española")
+    # ====== TAB 4: INFORMACIÓN ======
+    with tab4:
+        st.header("📋 Información")
+        st.info("📋 **Descripción**: Consulta las reglas oficiales de la Quiniela Española y documentación del sistema.")
         
         # Información general
         st.markdown("""
@@ -1056,10 +1138,10 @@ Métricas: Accuracy, Precision, Recall, F1-Score
             st.subheader("🏆 Pleno al 15")
             st.markdown("""
             **Opciones disponibles:**
-            - **1**: Equipo local gana
-            - **X**: Empate  
-            - **2**: Equipo visitante gana
-            - **M**: Un equipo marca 3 o más goles
+            - **0**: 0 goles del equipo
+            - **1**: 1 gol del equipo  
+            - **2**: 2 goles del equipo
+            - **M**: 3 o más goles del equipo
             
             *Solo válido si aciertas los 14 partidos principales*
             """)
@@ -1182,6 +1264,322 @@ Métricas: Accuracy, Precision, Recall, F1-Score
         **Fuente**: Reglas basadas en la Resolución de 6 de julio de 2009 de Loterías y Apuestas del Estado, 
         publicada en el BOE el 23 de julio de 2009.
         """)
+
+    # ====== TAB 5: CONFIGURACIÓN AVANZADA ======
+    with tab5:
+        st.header("⚙️ Configuración Avanzada")
+        st.info("⚙️ **Descripción**: Configura manualmente partidos para quinielas personalizadas y ajustes avanzados.")
+        
+        st.subheader("⚙️ Configuración Manual de Quiniela")
+        st.markdown("""
+        **Selecciona exactamente 15 partidos** que formarán parte de tu Quiniela personalizada.
+        
+        🏆 **Quiniela oficial**: 14 partidos principales + 1 Pleno al 15
+        
+        💡 **Sugerencia**: Elige partidos de la próxima jornada para crear una configuración realista
+        """)
+        
+        # Indicar cuál es la próxima jornada
+        st.info("🗺️ Los partidos mostrados corresponden a las próximas jornadas disponibles de Primera y Segunda División")
+        
+        # Obtener partidos de la próxima jornada para selección
+        with st.spinner("Cargando partidos de la próxima jornada..."):
+            # Usar endpoint específico para obtener próximos partidos por jornada
+            upcoming_matches_data = make_api_request(f"/matches/upcoming-by-round/{current_season}")
+            
+            # Fallback: si no hay endpoint específico, obtener partidos futuros limitados
+            if not upcoming_matches_data:
+                la_liga_data = make_api_request(f"/matches/", {"season": current_season, "league_id": 140, "upcoming_only": True})
+                segunda_data = make_api_request(f"/matches/", {"season": current_season, "league_id": 141, "upcoming_only": True})
+                
+                matches = []
+                if la_liga_data and isinstance(la_liga_data, list):
+                    matches.extend([m for m in la_liga_data if not m.get('result')])  # Solo partidos sin resultado
+                if segunda_data and isinstance(segunda_data, list):
+                    matches.extend([m for m in segunda_data if not m.get('result')])  # Solo partidos sin resultado
+                
+                if matches:
+                    upcoming_matches_data = {"matches": matches[:30]}  # Limitar a próximos 30
+            
+            all_matches_data = upcoming_matches_data
+        
+        if all_matches_data and all_matches_data.get('matches'):
+            matches = all_matches_data['matches']
+            st.success(f"✅ {len(matches)} partidos disponibles para selección")
+            
+            # Mostrar información de las jornadas disponibles
+            if all_matches_data.get('la_liga_round') or all_matches_data.get('segunda_round'):
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    if all_matches_data.get('la_liga_round'):
+                        st.metric("🏆 Próxima Jornada La Liga", f"Jornada {all_matches_data['la_liga_round']}")
+                with col_info2:
+                    if all_matches_data.get('segunda_round'):
+                        st.metric("🏅 Próxima Jornada Segunda", f"Jornada {all_matches_data['segunda_round']}")
+                st.markdown("---")
+            
+            # Debug: Mostrar estructura de datos si hay problemas
+            if st.checkbox("🔧 Mostrar datos raw (debug)", key="debug_matches"):
+                st.subheader("Debug: Estructura de datos")
+                if matches:
+                    st.write("**Primer partido de muestra:**")
+                    st.json(matches[0])
+                else:
+                    st.write("No hay partidos para mostrar")
+            
+            # Separar por ligas
+            la_liga_matches = [m for m in matches if m.get('league_id') == 140]
+            segunda_matches = [m for m in matches if m.get('league_id') == 141]
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("🏆 La Liga")
+                if la_liga_matches:
+                    selected_la_liga = []
+                    for i, match in enumerate(la_liga_matches[:20]):  # Limitar a 20 para no saturar
+                        # Extraer datos del partido de forma segura
+                        match_id = match.get('id', f'match_{i}')
+                        
+                        # Manejar nombres de equipos (puede venir como objeto o string)
+                        home_team = match.get('home_team', {})
+                        away_team = match.get('away_team', {})
+                        
+                        if isinstance(home_team, dict):
+                            home_name = home_team.get('name', f'Equipo Local {i+1}')
+                        else:
+                            home_name = str(home_team) if home_team else f'Equipo Local {i+1}'
+                        
+                        if isinstance(away_team, dict):
+                            away_name = away_team.get('name', f'Equipo Visitante {i+1}')
+                        else:
+                            away_name = str(away_team) if away_team else f'Equipo Visitante {i+1}'
+                        
+                        # Formatear fecha
+                        match_date = match.get('match_date', '')
+                        if match_date:
+                            try:
+                                from datetime import datetime
+                                date_obj = datetime.fromisoformat(match_date.replace('Z', '+00:00'))
+                                formatted_date = date_obj.strftime('%d/%m %H:%M')
+                            except:
+                                formatted_date = match_date[:16] if len(match_date) > 16 else match_date
+                        else:
+                            formatted_date = "Fecha TBD"
+                        
+                        # Crear etiqueta legible
+                        match_label = f"⚽ {home_name} vs {away_name}"
+                        if formatted_date != "Fecha TBD":
+                            match_label += f" - 📅 {formatted_date}"
+                        
+                        # Agregar información adicional si está disponible
+                        round_info = match.get('round', '')
+                        if round_info:
+                            match_label += f" (J{round_info})"
+                        
+                        if st.checkbox(match_label, key=f"la_liga_{i}"):
+                            selected_la_liga.append({
+                                'match_id': match_id,
+                                'home_team': home_name,
+                                'away_team': away_name,
+                                'match_date': match_date,
+                                'league': 'La Liga'
+                            })
+                else:
+                    st.info("No hay partidos de La Liga disponibles")
+            
+            with col2:
+                st.subheader("🥈 Segunda División")
+                if segunda_matches:
+                    selected_segunda = []
+                    for i, match in enumerate(segunda_matches[:20]):  # Limitar a 20 para no saturar
+                        # Extraer datos del partido de forma segura
+                        match_id = match.get('id', f'match_segunda_{i}')
+                        
+                        # Manejar nombres de equipos (puede venir como objeto o string)
+                        home_team = match.get('home_team', {})
+                        away_team = match.get('away_team', {})
+                        
+                        if isinstance(home_team, dict):
+                            home_name = home_team.get('name', f'Equipo Local {i+1}')
+                        else:
+                            home_name = str(home_team) if home_team else f'Equipo Local {i+1}'
+                        
+                        if isinstance(away_team, dict):
+                            away_name = away_team.get('name', f'Equipo Visitante {i+1}')
+                        else:
+                            away_name = str(away_team) if away_team else f'Equipo Visitante {i+1}'
+                        
+                        # Formatear fecha
+                        match_date = match.get('match_date', '')
+                        if match_date:
+                            try:
+                                from datetime import datetime
+                                date_obj = datetime.fromisoformat(match_date.replace('Z', '+00:00'))
+                                formatted_date = date_obj.strftime('%d/%m %H:%M')
+                            except:
+                                formatted_date = match_date[:16] if len(match_date) > 16 else match_date
+                        else:
+                            formatted_date = "Fecha TBD"
+                        
+                        # Crear etiqueta legible
+                        match_label = f"⚽ {home_name} vs {away_name}"
+                        if formatted_date != "Fecha TBD":
+                            match_label += f" - 📅 {formatted_date}"
+                        
+                        # Agregar información adicional si está disponible
+                        round_info = match.get('round', '')
+                        if round_info:
+                            match_label += f" (J{round_info})"
+                        
+                        if st.checkbox(match_label, key=f"segunda_{i}"):
+                            selected_segunda.append({
+                                'match_id': match_id,
+                                'home_team': home_name,
+                                'away_team': away_name,
+                                'match_date': match_date,
+                                'league': 'Segunda División'
+                            })
+                else:
+                    st.info("No hay partidos de Segunda División disponibles")
+            
+            # Mostrar resumen de selección
+            all_selected = selected_la_liga + selected_segunda
+            total_selected = len(all_selected)
+            
+            st.markdown("---")
+            st.subheader("📋 Resumen de Selección")
+            
+            if total_selected > 0:
+                if total_selected <= 15:
+                    if total_selected == 15:
+                        st.success(f"✅ Perfecto! Has seleccionado exactamente {total_selected} partidos")
+                    else:
+                        st.info(f"ℹ️ Has seleccionado {total_selected} partidos. Se necesitan exactamente 15 (14 + Pleno al 15)")
+                    
+                    # Mostrar los partidos seleccionados
+                    st.write("**Partidos seleccionados:**")
+                    for i, match in enumerate(all_selected, 1):
+                        st.write(f"{i}. {match['home_team']} vs {match['away_team']} ({match['league']})")
+                    
+                    # Si hay exactamente 15, permitir designar el Pleno al 15
+                    if total_selected == 15:
+                        st.markdown("---")
+                        st.subheader("🏆 Designar Pleno al 15")
+                        pleno_options = [f"{i}. {match['home_team']} vs {match['away_team']}" for i, match in enumerate(all_selected, 1)]
+                        pleno_selection = st.selectbox(
+                            "Selecciona cuál será el partido del Pleno al 15:",
+                            options=range(len(pleno_options)),
+                            format_func=lambda x: pleno_options[x],
+                            index=14  # Por defecto el último partido
+                        )
+                        
+                        # Nombre para la configuración
+                        config_name = st.text_input(
+                            "📝 Nombre para esta configuración:",
+                            value=f"Quiniela Semana {datetime.now().isocalendar()[1]} - {current_season}",
+                            help="Dale un nombre descriptivo a tu configuración personalizada"
+                        )
+                        
+                        if st.button("💾 Guardar Configuración de Quiniela", type="primary"):
+                            if not config_name.strip():
+                                st.error("❌ El nombre de la configuración es obligatorio")
+                            else:
+                                # Preparar datos para enviar a la API
+                                selected_match_ids = [match['match_id'] for match in all_selected]
+                                pleno_al_15_match_id = all_selected[pleno_selection]['match_id']
+                                week_number = datetime.now().isocalendar()[1]  # Semana actual del año
+                                
+                                config_data = {
+                                    'week_number': week_number,
+                                    'season': current_season,
+                                    'config_name': config_name.strip(),
+                                    'selected_match_ids': selected_match_ids,
+                                    'pleno_al_15_match_id': pleno_al_15_match_id
+                                }
+                                
+                                # Enviar a la API
+                                with st.spinner("Guardando configuración..."):
+                                    response = make_api_request("/quiniela/custom-config/save", config_data, method="POST")
+                                    
+                                    if response and response.get('status') != 'error':
+                                        st.success("✅ Configuración guardada exitosamente!")
+                                        
+                                        # Mostrar resumen
+                                        with st.expander("📊 Resumen de configuración guardada", expanded=True):
+                                            st.write(f"**Nombre:** {response.get('config_name')}")
+                                            st.write(f"**Semana:** {response.get('week_number')} (Temporada {response.get('season')})")
+                                            st.write(f"**Total partidos:** {response.get('total_matches')}")
+                                            st.write(f"**La Liga:** {response.get('la_liga_count')} partidos")
+                                            st.write(f"**Segunda División:** {response.get('segunda_count')} partidos")
+                                            
+                                            # Mostrar lista de partidos seleccionados
+                                            st.subheader("🏆 Partidos seleccionados:")
+                                            for i, match in enumerate(response.get('selected_matches', []), 1):
+                                                pleno_indicator = " 🎯 **PLENO AL 15**" if match.get('is_pleno_al_15') else ""
+                                                st.write(f"{i}. {match['home_team']} vs {match['away_team']} ({match['league']}){pleno_indicator}")
+                                        
+                                        # Limpiar la selección para permitir nueva configuración
+                                        st.balloons()
+                                        st.rerun()
+                                    else:
+                                        error_msg = response.get('detail', 'Error desconocido') if response else 'No se pudo conectar con la API'
+                                        st.error(f"❌ Error al guardar: {error_msg}")
+                else:
+                    st.warning(f"⚠️ Has seleccionado {total_selected} partidos. Máximo permitido: 15")
+            else:
+                st.info("👆 Selecciona partidos usando las casillas de verificación arriba")
+        
+        else:
+            st.error("❌ No se pudieron cargar los partidos. Verifica que la API esté funcionando.")
+    
+        # Sección para ver configuraciones guardadas
+        st.markdown("---")
+        st.subheader("📂 Configuraciones Guardadas")
+        
+        # Cargar configuraciones guardadas
+        saved_configs_response = make_api_request(f"/quiniela/custom-config/list", {"season": current_season})
+        
+        if saved_configs_response and not saved_configs_response.get('status') == 'error':
+            configs = saved_configs_response.get('configs', [])
+            
+            if configs:
+                st.write(f"Tienes **{len(configs)}** configuraciones guardadas para la temporada {current_season}:")
+                
+                for config in configs:
+                    with st.expander(f"📋 {config['config_name']} (Semana {config['week_number']})", expanded=False):
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Total Partidos", config['total_matches'])
+                        with col2:
+                            st.metric("La Liga", config['la_liga_count'])
+                        with col3:
+                            st.metric("Segunda División", config['segunda_count'])
+                        
+                        st.write(f"**Creada:** {config['created_at'][:19].replace('T', ' ')}")
+                        st.write(f"**Estado:** {'🟢 Activa' if config['is_active'] else '🔴 Inactiva'}")
+                        
+                        # Mostrar partidos
+                        st.subheader("🏆 Partidos seleccionados:")
+                        for i, match in enumerate(config.get('selected_matches', []), 1):
+                            pleno_indicator = " 🎯 **PLENO AL 15**" if match.get('is_pleno_al_15') else ""
+                            match_date = match.get('match_date', '')
+                            if match_date:
+                                try:
+                                    from datetime import datetime
+                                    date_obj = datetime.fromisoformat(match_date.replace('Z', '+00:00'))
+                                    formatted_date = f" - {date_obj.strftime('%d/%m %H:%M')}"
+                                except:
+                                    formatted_date = f" - {match_date[:16]}"
+                            else:
+                                formatted_date = ""
+                            
+                            st.write(f"{i}. {match['home_team']} vs {match['away_team']} ({match['league']}){formatted_date}{pleno_indicator}")
+            else:
+                st.info("No tienes configuraciones guardadas aún. ¡Crea tu primera configuración arriba!")
+        else:
+            st.warning("⚠️ No se pudieron cargar las configuraciones guardadas.")
 
 
 if __name__ == "__main__":
