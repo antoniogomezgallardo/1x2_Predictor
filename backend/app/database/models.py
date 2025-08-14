@@ -264,3 +264,37 @@ class QuinielaWeekSchedule(Base):
     
     def __repr__(self):
         return f"<QuinielaWeekSchedule(week={self.week_number}, season={self.season})>"
+
+
+class CustomQuinielaConfig(Base):
+    """
+    Configuración personalizada de Quiniela seleccionada manualmente por el usuario
+    """
+    __tablename__ = "custom_quiniela_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    week_number = Column(Integer, nullable=False)
+    season = Column(Integer, nullable=False)
+    config_name = Column(String(100), nullable=False)  # Nombre descriptivo para la configuración
+    
+    # Lista de match_ids seleccionados (15 partidos)
+    selected_match_ids = Column(JSON, nullable=False)  # Array de IDs de partidos seleccionados
+    
+    # ID del partido designado como Pleno al 15
+    pleno_al_15_match_id = Column(Integer, nullable=False)
+    
+    # Información adicional
+    total_matches = Column(Integer, default=15)
+    la_liga_count = Column(Integer, default=0)  # Cuántos partidos de La Liga
+    segunda_count = Column(Integer, default=0)  # Cuántos partidos de Segunda
+    
+    # Estado
+    is_active = Column(Boolean, default=True)  # Si esta configuración está activa
+    created_by_user = Column(Boolean, default=True)  # Creada manualmente por usuario
+    
+    # Metadatos
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f"<CustomQuinielaConfig(name={self.config_name}, week={self.week_number}, season={self.season})>"
