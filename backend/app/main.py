@@ -838,6 +838,286 @@ async def update_quiniela_results(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/quiniela/custom-config/save")
+async def save_custom_quiniela_config(
+    config_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Guarda una configuración personalizada de Quiniela seleccionada manualmente por el usuario
+    """
+    try:
+        # Validar datos requeridos
+        required_fields = ["week_number", "season", "config_name", "selected_match_ids", "pleno_al_15_match_id"]
+        for field in required_fields:
+            if field not in config_data:
+                raise HTTPException(status_code=400, detail=f"Campo requerido '{field}' no encontrado")
+        
+        # Validar que se seleccionaron exactamente 15 partidos
+        selected_matches = config_data["selected_match_ids"]
+        if len(selected_matches) != 15:
+            raise HTTPException(status_code=400, detail=f"Debe seleccionar exactamente 15 partidos. Seleccionados: {len(selected_matches)}")
+        
+        # Validar que el partido del Pleno al 15 está en la lista seleccionada
+        pleno_match_id = config_data["pleno_al_15_match_id"]
+        if pleno_match_id not in selected_matches:
+            raise HTTPException(status_code=400, detail="El partido del Pleno al 15 debe estar entre los partidos seleccionados")
+        
+        # Validar que todos los partidos existen en la base de datos
+        existing_match_ids = [m.id for m in db.query(Match.id).filter(Match.id.in_(selected_matches)).all()]
+        missing_matches = set(selected_matches) - set(existing_match_ids)
+        if missing_matches:
+            raise HTTPException(status_code=404, detail=f"Partidos no encontrados: {missing_matches}")
+        
+        # Contar partidos por liga
+        match_leagues = db.query(Match.league_id).filter(Match.id.in_(selected_matches)).all()
+        la_liga_count = sum(1 for league in match_leagues if league[0] == 140)
+        segunda_count = sum(1 for league in match_leagues if league[0] == 141)
+        
+        # Desactivar configuraciones previas para la misma semana/temporada
+        db.query(CustomQuinielaConfig).filter(
+            CustomQuinielaConfig.week_number == config_data["week_number"],
+            CustomQuinielaConfig.season == config_data["season"]
+        ).update({"is_active": False})
+        
+        # Crear nueva configuración
+        new_config = CustomQuinielaConfig(
+            week_number=config_data["week_number"],
+            season=config_data["season"],
+            config_name=config_data["config_name"],
+            selected_match_ids=selected_matches,
+            pleno_al_15_match_id=pleno_match_id,
+            la_liga_count=la_liga_count,
+            segunda_count=segunda_count,
+            is_active=True,
+            created_by_user=True
+        )
+        
+        db.add(new_config)
+        db.commit()
+        
+        # Obtener información detallada de los partidos seleccionados para respuesta
+        selected_match_details = db.query(Match).filter(Match.id.in_(selected_matches)).all()
+        match_info = []
+        for match in selected_match_details:
+            match_info.append({
+                "id": match.id,
+                "home_team": match.home_team.name if match.home_team else "TBD",
+                "away_team": match.away_team.name if match.away_team else "TBD",
+                "league": "La Liga" if match.league_id == 140 else "Segunda División",
+                "match_date": match.match_date.isoformat() if match.match_date else None,
+                "is_pleno_al_15": match.id == pleno_match_id
+            })
+        
+        return {
+            "id": new_config.id,
+            "message": "Configuración personalizada guardada exitosamente",
+            "config_name": new_config.config_name,
+            "week_number": new_config.week_number,
+            "season": new_config.season,
+            "total_matches": len(selected_matches),
+            "la_liga_count": la_liga_count,
+            "segunda_count": segunda_count,
+            "pleno_al_15_match_id": pleno_match_id,
+            "selected_matches": match_info,
+            "created_at": new_config.created_at.isoformat(),
+            "status": "active"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving custom quiniela config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+@app.get("/quiniela/from-config/{config_id}")
+async def get_predictions_from_config(config_id: int, db: Session = Depends(get_db)):
+    """
+    Genera predicciones usando una configuración personalizada guardada
+    """
+    try:
+        # Obtener configuración
+        config = db.query(CustomQuinielaConfig).filter_by(id=config_id).first()
+        if not config:
+            raise HTTPException(status_code=404, detail="Configuración no encontrada")
+        
+        # Obtener partidos de la configuración
+        selected_matches = db.query(Match).filter(Match.id.in_(config.selected_match_ids)).all()
+        
+        if len(selected_matches) < 14:
+            raise HTTPException(status_code=400, detail=f"Configuración inválida: solo {len(selected_matches)} partidos disponibles")
+        
+        from datetime import datetime
+        from .ml.basic_predictor import create_basic_predictions_for_matches
+        
+        # Generar predicciones básicas para estos partidos específicos
+        predictions = create_basic_predictions_for_matches(db, selected_matches, config.season)
+        
+        return {
+            "season": config.season,
+            "config_name": config.config_name,
+            "week_number": config.week_number,
+            "data_season": config.season,
+            "using_previous_season": False,
+            "total_matches": len(predictions),
+            "matches": predictions[:15],  # Máximo 15 para Quiniela
+            "generated_at": datetime.now().isoformat(),
+            "model_version": "basic_predictor_custom",
+            "message": f"Predicciones generadas para configuración personalizada: {config.config_name}",
+            "note": "Predicciones basadas en configuración personalizada de partidos seleccionados manualmente"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating predictions from config {config_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+@app.get("/matches/upcoming-by-round/{season}")
+async def get_upcoming_matches_by_round(season: int, db: Session = Depends(get_db)):
+    """
+    Obtiene partidos de la próxima jornada para Primera y Segunda División
+    """
+    try:
+        from datetime import datetime
+        
+        # Obtener la próxima jornada con partidos pendientes para cada liga
+        la_liga_next_round_query = db.query(Match.round).filter(
+            Match.season == season,
+            Match.league_id == 140,
+            Match.result.is_(None),  # Sin resultado
+            Match.home_goals.is_(None)  # Sin goles
+        ).order_by(Match.round).first()
+        
+        segunda_next_round_query = db.query(Match.round).filter(
+            Match.season == season,
+            Match.league_id == 141,
+            Match.result.is_(None),  # Sin resultado
+            Match.home_goals.is_(None)  # Sin goles
+        ).order_by(Match.round).first()
+        
+        matches = []
+        
+        # Obtener partidos de La Liga de la próxima jornada
+        if la_liga_next_round_query:
+            la_liga_round = la_liga_next_round_query[0]
+            la_liga_matches = db.query(Match).filter(
+                Match.season == season,
+                Match.league_id == 140,
+                Match.round == la_liga_round,
+                Match.result.is_(None)
+            ).order_by(Match.match_date).all()
+            matches.extend(la_liga_matches)
+        
+        # Obtener partidos de Segunda División de la próxima jornada
+        if segunda_next_round_query:
+            segunda_round = segunda_next_round_query[0]
+            segunda_matches = db.query(Match).filter(
+                Match.season == season,
+                Match.league_id == 141,
+                Match.round == segunda_round,
+                Match.result.is_(None)
+            ).order_by(Match.match_date).all()
+            matches.extend(segunda_matches)
+        
+        # Convertir a formato API
+        matches_data = []
+        for match in matches[:30]:  # Limitar a 30 partidos
+            matches_data.append({
+                "id": match.id,
+                "home_team": {
+                    "id": match.home_team_id,
+                    "name": match.home_team.name if match.home_team else "TBD"
+                },
+                "away_team": {
+                    "id": match.away_team_id,
+                    "name": match.away_team.name if match.away_team else "TBD"
+                },
+                "league_id": match.league_id,
+                "match_date": match.match_date.isoformat() if match.match_date else None,
+                "round": match.round,
+                "season": match.season,
+                "result": match.result
+            })
+        
+        return {
+            "matches": matches_data,
+            "total": len(matches_data),
+            "season": season,
+            "la_liga_round": la_liga_next_round_query[0] if la_liga_next_round_query else None,
+            "segunda_round": segunda_next_round_query[0] if segunda_next_round_query else None,
+            "message": f"Próximos partidos para temporada {season}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting upcoming matches by round: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+@app.get("/quiniela/custom-config/list")
+async def get_custom_quiniela_configs(
+    season: Optional[int] = None,
+    only_active: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene las configuraciones personalizadas de Quiniela guardadas
+    """
+    try:
+        query = db.query(CustomQuinielaConfig)
+        
+        if season:
+            query = query.filter(CustomQuinielaConfig.season == season)
+        
+        if only_active:
+            query = query.filter(CustomQuinielaConfig.is_active == True)
+        
+        configs = query.order_by(CustomQuinielaConfig.created_at.desc()).all()
+        
+        result = []
+        for config in configs:
+            # Obtener información de los partidos seleccionados
+            selected_matches = db.query(Match).filter(Match.id.in_(config.selected_match_ids)).all()
+            match_info = []
+            for match in selected_matches:
+                match_info.append({
+                    "id": match.id,
+                    "home_team": match.home_team.name if match.home_team else "TBD",
+                    "away_team": match.away_team.name if match.away_team else "TBD",
+                    "league": "La Liga" if match.league_id == 140 else "Segunda División",
+                    "match_date": match.match_date.isoformat() if match.match_date else None,
+                    "is_pleno_al_15": match.id == config.pleno_al_15_match_id
+                })
+            
+            result.append({
+                "id": config.id,
+                "config_name": config.config_name,
+                "week_number": config.week_number,
+                "season": config.season,
+                "total_matches": config.total_matches,
+                "la_liga_count": config.la_liga_count,
+                "segunda_count": config.segunda_count,
+                "pleno_al_15_match_id": config.pleno_al_15_match_id,
+                "is_active": config.is_active,
+                "created_at": config.created_at.isoformat(),
+                "selected_matches": match_info
+            })
+        
+        return {
+            "total_configs": len(result),
+            "season_filter": season,
+            "only_active": only_active,
+            "configs": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting custom quiniela configs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
 @app.get("/predictions/history", response_model=List[HistoricalPredictionResponse])
 async def get_prediction_history(season: int, limit: int = 10, db: Session = Depends(get_db)):
     """Get historical prediction performance"""
