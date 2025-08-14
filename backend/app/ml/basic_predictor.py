@@ -129,8 +129,14 @@ class BasicPredictor:
         )
         
         return {
-            "prediction": prediction,
+            "predicted_result": prediction,  # Campo esperado por el código que lo usa
+            "prediction": prediction,        # Mantener compatibilidad
             "confidence": confidence,
+            "probabilities": {
+                "home_win": home_prob,
+                "draw": draw_prob,
+                "away_win": away_prob
+            },
             "home_probability": home_prob,
             "draw_probability": draw_prob,
             "away_probability": away_prob,
@@ -278,6 +284,85 @@ class BasicPredictor:
         explanation += f"\n*Predicción basada en {method_desc} (experiencia, capacidad estadio, liga, rendimiento)*"
         
         return explanation
+
+def create_basic_predictions_for_matches(db: Session, matches: List[Match], season: int) -> List[Dict[str, Any]]:
+    """
+    Crea predicciones básicas para una lista específica de partidos
+    Usado para configuraciones personalizadas de Quiniela
+    """
+    predictor = BasicPredictor(db)
+    predictions = []
+    
+    try:
+        logger.info(f"Generating predictions for {len(matches)} custom selected matches")
+        
+        # Generar predicción para cada partido en orden
+        for i, match in enumerate(matches[:15], 1):  # Máximo 15 partidos
+            # Obtener equipos
+            home_team = db.query(Team).filter_by(id=match.home_team_id).first()
+            away_team = db.query(Team).filter_by(id=match.away_team_id).first()
+            
+            if not home_team or not away_team:
+                logger.warning(f"Teams not found for match {match.id}")
+                continue
+            
+            # Generar predicción usando el predictor básico
+            prediction = predictor.predict_match(home_team, away_team)
+            
+            # Obtener estadisticas si están disponibles
+            home_stats = db.query(TeamStatistics).filter_by(
+                team_id=home_team.id, season=season
+            ).first()
+            away_stats = db.query(TeamStatistics).filter_by(
+                team_id=away_team.id, season=season
+            ).first()
+            
+            # Crear entrada para Quiniela
+            prediction_entry = {
+                "match_number": i,
+                "match_id": match.id,
+                "home_team": home_team.name,
+                "away_team": away_team.name,
+                "league": "La Liga" if match.league_id == 140 else "Segunda División",
+                "match_date": match.match_date.isoformat() if match.match_date else None,
+                "prediction": {
+                    "result": prediction["predicted_result"],
+                    "confidence": prediction["confidence"],
+                    "probabilities": prediction["probabilities"]
+                },
+                "explanation": prediction.get("explanation", "Predicción básica personalizada")
+            }
+            
+            # Añadir estadisticas si están disponibles
+            if home_stats or away_stats:
+                prediction_entry["statistics"] = {
+                    "home_team": {
+                        "wins": home_stats.wins if home_stats else 0,
+                        "draws": home_stats.draws if home_stats else 0,
+                        "losses": home_stats.losses if home_stats else 0,
+                        "goals_for": home_stats.goals_for if home_stats else 0,
+                        "goals_against": home_stats.goals_against if home_stats else 0,
+                        "points": home_stats.points if home_stats else 0
+                    },
+                    "away_team": {
+                        "wins": away_stats.wins if away_stats else 0,
+                        "draws": away_stats.draws if away_stats else 0,
+                        "losses": away_stats.losses if away_stats else 0,
+                        "goals_for": away_stats.goals_for if away_stats else 0,
+                        "goals_against": away_stats.goals_against if away_stats else 0,
+                        "points": away_stats.points if away_stats else 0
+                    }
+                }
+            
+            predictions.append(prediction_entry)
+            
+        logger.info(f"Generated {len(predictions)} predictions for custom matches")
+        return predictions
+        
+    except Exception as e:
+        logger.error(f"Error generating predictions for custom matches: {str(e)}")
+        return []
+
 
 def create_basic_predictions_for_quiniela(db: Session, season: int) -> List[Dict[str, Any]]:
     """
