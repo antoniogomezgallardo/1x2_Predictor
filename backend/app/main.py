@@ -1146,12 +1146,43 @@ async def get_upcoming_matches_by_round(season: int, db: Session = Depends(get_d
                 "result": match.result
             })
         
+        # Convertir rounds a jornadas españolas usando la misma lógica
+        from .ml.basic_predictor import extract_spanish_jornada
+        
+        la_liga_jornada = None
+        if la_liga_next_round_query:
+            la_liga_round_raw = la_liga_next_round_query[0]
+            # Extraer número de jornada desde el round
+            la_liga_jornada = extract_spanish_jornada(la_liga_round_raw, [m for m in matches if m.league_id == 140])
+            # Extraer solo el número
+            if 'Jornada' in la_liga_jornada:
+                try:
+                    la_liga_jornada = int(la_liga_jornada.split('Jornada')[-1].strip())
+                except:
+                    la_liga_jornada = 1
+            else:
+                la_liga_jornada = 1
+        
+        segunda_jornada = None
+        if segunda_next_round_query:
+            segunda_round_raw = segunda_next_round_query[0]
+            # Extraer número de jornada desde el round
+            segunda_jornada = extract_spanish_jornada(segunda_round_raw, [m for m in matches if m.league_id == 141])
+            # Extraer solo el número
+            if 'Jornada' in segunda_jornada:
+                try:
+                    segunda_jornada = int(segunda_jornada.split('Jornada')[-1].strip())
+                except:
+                    segunda_jornada = 1
+            else:
+                segunda_jornada = 1
+        
         return {
             "matches": matches_data,
             "total": len(matches_data),
             "season": season,
-            "la_liga_round": la_liga_next_round_query[0] if la_liga_next_round_query else None,
-            "segunda_round": segunda_next_round_query[0] if segunda_next_round_query else None,
+            "la_liga_round": la_liga_jornada,
+            "segunda_round": segunda_jornada,
             "message": f"Próximos partidos para temporada {season}"
         }
         
@@ -1195,10 +1226,19 @@ async def get_custom_quiniela_configs(
                     "is_pleno_al_15": match.id == config.pleno_al_15_match_id
                 })
             
+            # CORRECCIÓN TEMPORAL: Corregir week_number incorrecto (33) a jornada real (1)
+            week_number = config.week_number
+            if week_number == 33:  # Datos incorrectos de la implementación anterior
+                week_number = 1
+                # Actualizar en la base de datos
+                config.week_number = 1
+                db.commit()
+                logger.info(f"Corrected week_number from 33 to 1 for config {config.id}")
+            
             result.append({
                 "id": config.id,
                 "config_name": config.config_name,
-                "week_number": config.week_number,
+                "week_number": week_number,  # Usar el valor corregido
                 "season": config.season,
                 "total_matches": config.total_matches,
                 "la_liga_count": config.la_liga_count,

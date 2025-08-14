@@ -1513,9 +1513,19 @@ Métricas: Accuracy, Precision, Recall, F1-Score
                         )
                         
                         # Nombre para la configuración
+                        # Obtener jornada real para el nombre por defecto
+                        try:
+                            api_response = make_api_request(f"/quiniela/next-matches/{current_season}")
+                            if api_response and api_response.get('round_display'):
+                                default_jornada = api_response['round_display']
+                            else:
+                                default_jornada = "Jornada 1"
+                        except:
+                            default_jornada = "Jornada 1"
+                        
                         config_name = st.text_input(
                             "📝 Nombre para esta configuración:",
-                            value=f"Quiniela Semana {datetime.now().isocalendar()[1]} - {current_season}",
+                            value=f"Quiniela {default_jornada} - {current_season}",
                             help="Dale un nombre descriptivo a tu configuración personalizada"
                         )
                         
@@ -1533,12 +1543,18 @@ Métricas: Accuracy, Precision, Recall, F1-Score
                                         # Extraer número de jornada del display
                                         round_display = api_response['round_display']
                                         if 'Jornada' in round_display:
-                                            week_number = int(round_display.split('Jornada')[-1].strip().split()[0])
+                                            # Extraer número de jornada (ej: "Jornada 1" -> 1)
+                                            jornada_text = round_display.split('Jornada')[-1].strip()
+                                            # Buscar el primer número en el texto
+                                            import re
+                                            jornada_match = re.search(r'\d+', jornada_text)
+                                            week_number = int(jornada_match.group()) if jornada_match else 1
                                         else:
                                             week_number = 1  # Fallback
                                     else:
                                         week_number = 1  # Fallback si no hay respuesta
-                                except:
+                                except Exception as e:
+                                    st.error(f"Error al detectar jornada: {e}")
                                     week_number = 1  # Fallback en caso de error
                                 
                                 config_data = {
