@@ -165,7 +165,7 @@ def main():
                         with col_info2:
                             st.metric("🏅 Segunda Div.", f"{selected_config['segunda_count']} partidos")
                         with col_info3:
-                            st.metric("📅 Semana", selected_config['week_number'])
+                            st.metric("📅 Jornada", selected_config['week_number'])
                         
                         if not selected_config['is_active']:
                             st.warning("⚠️ Esta configuración está marcada como inactiva")
@@ -610,8 +610,13 @@ def main():
                     st.metric("Temporada", predictions_data['season'])
                 
                 with col2:
-                    week_num = predictions_data.get('week_number') or 'N/A'
-                    st.metric("Jornada", week_num)
+                    # Usar la jornada detectada del sistema
+                    round_display = predictions_data.get('round_display', 'N/A')
+                    if round_display == 'N/A':
+                        # Fallback a week_number si no hay round_display
+                        week_num = predictions_data.get('week_number', 'N/A')
+                        round_display = f"Jornada {week_num}" if week_num != 'N/A' else 'N/A'
+                    st.metric("Jornada", round_display)
                 
                 with col3:
                     # Calcular confianza media de forma segura
@@ -658,7 +663,8 @@ def main():
                         st.info("🤖 **Modelo no entrenado**")
                         st.write("Para ver predicciones, primero necesitas entrenar el modelo:")
                         st.write("1. Ve a la pestaña '🔧 Administración'")
-                        st.write("2. Haz clic en 'Entrenar Nuevo Modelo'")
+                        st.write("2. Haz clic en '🚀 Entrenar Nuevo Modelo'")
+                        st.write("3. Usa '🔍 Verificar Estado' para monitorear el progreso")
                         st.write("3. Espera 10-15 minutos")
                         st.write("4. ¡Regresa aquí para ver las predicciones!")
                     elif not predictions_data.get('predictions'):
@@ -1092,15 +1098,47 @@ def main():
             with col2:
                 st.subheader("Entrenar Modelo")
                 
-                if st.button("Entrenar Nuevo Modelo", type="primary"):
-                    with st.spinner("Entrenando modelo... Esto puede tomar varios minutos."):
-                        # Llamar al endpoint con season como query parameter
-                        result = make_api_request(f"/model/train?season={current_season}", method="POST")
-                        if result:
-                            st.success(f"✅ Entrenamiento iniciado con {result.get('training_samples', 'N/A')} muestras")
-                            st.info("⏳ El entrenamiento se ejecuta en segundo plano. Actualiza la página en unos minutos.")
-                        else:
-                            st.error("❌ Error al iniciar el entrenamiento del modelo")
+                col_btn1, col_btn2 = st.columns(2)
+                
+                with col_btn1:
+                    if st.button("🚀 Entrenar Nuevo Modelo", type="primary"):
+                        with st.spinner("Iniciando entrenamiento..."):
+                            # Llamar al endpoint con season como query parameter
+                            result = make_api_request(f"/model/train?season={current_season}", method="POST")
+                            if result:
+                                if result.get('status') == 'training_started':
+                                    st.success(f"✅ **Entrenamiento iniciado exitosamente**")
+                                    st.info(f"📊 **Datos de entrenamiento**: {result.get('matches_found', 'N/A')} partidos")
+                                    st.info(f"📅 **Temporada**: {result.get('training_season', 'N/A')}")
+                                    st.info(f"⏱️ **Duración estimada**: {result.get('estimated_duration', '5-10 minutos')}")
+                                    st.warning("⏳ **El entrenamiento se ejecuta en segundo plano. Usa el botón 'Verificar Estado' para monitorear el progreso.**")
+                                elif result.get('status') == 'insufficient_data':
+                                    st.warning("⚠️ **Datos insuficientes para entrenamiento**")
+                                    st.info(result.get('message', 'No hay suficientes datos'))
+                                    st.info(result.get('recommendation', ''))
+                                else:
+                                    st.info(result.get('message', 'Entrenamiento programado'))
+                            else:
+                                st.error("❌ **Error al iniciar el entrenamiento del modelo**")
+                
+                with col_btn2:
+                    if st.button("🔍 Verificar Estado", type="secondary"):
+                        with st.spinner("Verificando estado del entrenamiento..."):
+                            status_result = make_api_request("/model/training-status")
+                            if status_result:
+                                if status_result.get('is_trained'):
+                                    st.success("✅ **Modelo entrenado correctamente**")
+                                    st.info(f"🔖 **Versión**: {status_result.get('model_version', 'N/A')}")
+                                    st.info(f"⏰ **Última verificación**: {status_result.get('last_check', 'N/A')}")
+                                else:
+                                    training_status = status_result.get('training_status', 'unknown')
+                                    if training_status == 'not_trained':
+                                        st.warning("⏳ **Modelo aún no entrenado**")
+                                        st.info("El entrenamiento puede tardar 5-10 minutos. Inténtalo de nuevo en unos momentos.")
+                                    else:
+                                        st.info(f"ℹ️ **Estado**: {training_status}")
+                            else:
+                                st.error("❌ **Error al verificar estado del entrenamiento**")
                 
                 st.subheader("Configuración del Modelo")
                 st.info("Configuración actual:")
@@ -1488,7 +1526,20 @@ Métricas: Accuracy, Precision, Recall, F1-Score
                                 # Preparar datos para enviar a la API
                                 selected_match_ids = [match['match_id'] for match in all_selected]
                                 pleno_al_15_match_id = all_selected[pleno_selection]['match_id']
-                                week_number = datetime.now().isocalendar()[1]  # Semana actual del año
+                                # Detectar jornada real desde la API
+                                try:
+                                    api_response = make_api_request(f"/quiniela/next-matches/{current_season}")
+                                    if api_response and api_response.get('round_display'):
+                                        # Extraer número de jornada del display
+                                        round_display = api_response['round_display']
+                                        if 'Jornada' in round_display:
+                                            week_number = int(round_display.split('Jornada')[-1].strip().split()[0])
+                                        else:
+                                            week_number = 1  # Fallback
+                                    else:
+                                        week_number = 1  # Fallback si no hay respuesta
+                                except:
+                                    week_number = 1  # Fallback en caso de error
                                 
                                 config_data = {
                                     'week_number': week_number,
@@ -1508,7 +1559,7 @@ Métricas: Accuracy, Precision, Recall, F1-Score
                                         # Mostrar resumen
                                         with st.expander("📊 Resumen de configuración guardada", expanded=True):
                                             st.write(f"**Nombre:** {response.get('config_name')}")
-                                            st.write(f"**Semana:** {response.get('week_number')} (Temporada {response.get('season')})")
+                                            st.write(f"**Jornada:** {response.get('week_number')} (Temporada {response.get('season')})")
                                             st.write(f"**Total partidos:** {response.get('total_matches')}")
                                             st.write(f"**La Liga:** {response.get('la_liga_count')} partidos")
                                             st.write(f"**Segunda División:** {response.get('segunda_count')} partidos")
@@ -1547,7 +1598,7 @@ Métricas: Accuracy, Precision, Recall, F1-Score
                 st.write(f"Tienes **{len(configs)}** configuraciones guardadas para la temporada {current_season}:")
                 
                 for config in configs:
-                    with st.expander(f"📋 {config['config_name']} (Semana {config['week_number']})", expanded=False):
+                    with st.expander(f"📋 {config['config_name']} (Jornada {config['week_number']})", expanded=False):
                         col1, col2, col3 = st.columns(3)
                         
                         with col1:

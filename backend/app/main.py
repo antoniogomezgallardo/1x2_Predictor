@@ -246,6 +246,7 @@ async def get_matches(
 @app.post("/model/train")
 def train_model(
     season: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Train the prediction model with historical data"""
@@ -259,6 +260,9 @@ def train_model(
     ).all()
     
     logger.info(f"Training request for season {season}, found {len(completed_matches)} completed matches")
+    
+    training_season = season
+    matches_to_use = completed_matches
     
     # If future season (like 2025) or current season without sufficient data
     if len(completed_matches) < 100:
@@ -275,39 +279,114 @@ def train_model(
             
             if len(fallback_matches) >= 100:
                 # Use previous season for training
-                return {
-                    "message": f"Season {season} has no historical data yet. Using season {fallback_season} data for model training.",
-                    "matches_found": len(fallback_matches),
-                    "training_season": fallback_season,
-                    "requested_season": season,
-                    "note": f"Model trained with {fallback_season} data will be used for {season} predictions until {season} has sufficient historical data.",
-                    "status": "success_with_fallback"
-                }
+                training_season = fallback_season
+                matches_to_use = fallback_matches
             else:
                 return {
-                    "message": f"Neither season {season} nor fallback season {fallback_season} has sufficient data for training.",
+                    "message": f"Ni la temporada {season} ni la temporada {fallback_season} tienen datos suficientes para entrenar.",
                     "matches_found_current": len(completed_matches),
                     "matches_found_fallback": len(fallback_matches),
                     "minimum_required": 100,
-                    "recommendation": f"Wait for more {season} matches to complete, or load historical data for {fallback_season}.",
+                    "recommendation": f"Espera a que se completen más partidos de {season}, o carga datos históricos de {fallback_season}.",
                     "status": "insufficient_data",
-                    "note": "For new seasons, the system uses BasicPredictor until sufficient ML training data is available."
+                    "note": "Para temporadas nuevas, el sistema usa el Predictor Básico hasta que haya suficientes datos de entrenamiento ML."
                 }
         else:
             # Historical season without enough data
             raise HTTPException(
                 status_code=400, 
-                detail=f"Season {season} has insufficient historical data. Found {len(completed_matches)} matches, need at least 100."
+                detail=f"La temporada {season} tiene datos históricos insuficientes. Se encontraron {len(completed_matches)} partidos, se necesitan al menos 100."
             )
     
-    # Sufficient data available for training
+    # Start training in background
+    def train_model_task():
+        try:
+            logger.info(f"Starting model training for season {training_season} with {len(matches_to_use)} matches")
+            
+            # Prepare training data
+            from .services.data_extractor import DataExtractor
+            extractor = DataExtractor(db)
+            
+            # Convert matches to training format
+            training_data = []
+            for match in matches_to_use:
+                if match.home_team and match.away_team and match.result:
+                    match_data = {
+                        'match_id': match.id,
+                        'home_team': match.home_team,
+                        'away_team': match.away_team,
+                        'season': match.season,
+                        'league_id': match.league_id,
+                        'result': match.result,
+                        'home_goals': match.home_goals or 0,
+                        'away_goals': match.away_goals or 0,
+                        'match_date': match.match_date
+                    }
+                    training_data.append(match_data)
+            
+            if len(training_data) >= 100:
+                # Train the model
+                training_result = predictor.train_model(training_data)
+                logger.info(f"Model training completed: {training_result}")
+                
+                # Mark as trained
+                predictor.is_trained = True
+                predictor.model_version = f"v{training_season}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                
+                # Save model (if save method exists)
+                try:
+                    model_path = f"data/models/quiniela_model_{training_season}.pkl"
+                    if hasattr(predictor, 'save_model'):
+                        predictor.save_model(model_path)
+                        logger.info(f"Model saved to {model_path}")
+                    else:
+                        logger.info("Model training completed (save method not available)")
+                except Exception as save_error:
+                    logger.warning(f"Model training succeeded but save failed: {save_error}")
+                
+                logger.info(f"Model training process completed successfully")
+            else:
+                logger.error(f"Insufficient training data after processing: {len(training_data)} valid matches")
+                
+        except Exception as e:
+            logger.error(f"Model training failed: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    # Add background task
+    background_tasks.add_task(train_model_task)
+    
     return {
-        "message": f"Model training would start with season {season} data.",
-        "matches_found": len(completed_matches),
-        "training_season": season,
+        "message": f"Entrenamiento del modelo iniciado en segundo plano usando datos de la temporada {training_season}.",
+        "matches_found": len(matches_to_use),
+        "training_season": training_season,
         "requested_season": season,
-        "status": "success"
+        "status": "training_started",
+        "estimated_duration": "5-10 minutos",
+        "note": "El entrenamiento se ejecuta en segundo plano. Verifica el estado del modelo en unos minutos.",
+        "check_status_url": "/analytics/model-performance"
     }
+
+
+@app.get("/model/training-status")
+async def get_training_status():
+    """Get current training status of the model"""
+    try:
+        return {
+            "is_trained": getattr(predictor, 'is_trained', False),
+            "model_version": getattr(predictor, 'model_version', None),
+            "training_status": "completed" if getattr(predictor, 'is_trained', False) else "not_trained",
+            "last_check": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting training status: {str(e)}")
+        return {
+            "is_trained": False,
+            "model_version": None,
+            "training_status": "unknown",
+            "error": str(e),
+            "last_check": datetime.utcnow().isoformat()
+        }
 
 
 @app.get("/predictions/current-week")
@@ -517,19 +596,43 @@ async def get_next_quiniela_matches(season: int, db: Session = Depends(get_db)):
         # Si hay suficientes partidos futuros, usar predictor básico
         if len(upcoming_matches) >= 14:
             logger.info(f"Using basic predictor for {len(upcoming_matches)} upcoming matches")
-            basic_predictions = create_basic_predictions_for_quiniela(db, season)
+            basic_result = create_basic_predictions_for_quiniela(db, season)
             
-            if len(basic_predictions) >= 14:
+            if isinstance(basic_result, dict) and len(basic_result.get('predictions', [])) >= 14:
+                predictions = basic_result['predictions']
+                detected_round = basic_result.get('detected_round')
+                round_type = basic_result.get('round_type', 'jornada')
+                jornada_display = basic_result.get('jornada_display', 'Jornada 1')
+                
                 return {
                     "season": season,
                     "data_season": season,
                     "using_previous_season": False,
-                    "total_matches": len(basic_predictions),
-                    "matches": basic_predictions[:15],  # Máximo 15 para Quiniela
+                    "total_matches": len(predictions),
+                    "matches": predictions[:15],  # Máximo 15 para Quiniela
                     "generated_at": datetime.now().isoformat(),
                     "model_version": "basic_predictor",
                     "message": "Predicciones generadas con algoritmo básico para partidos futuros",
-                    "note": "Predicciones basadas en heurísticas (datos históricos, estadios, ligas) - ideal para inicio de temporada"
+                    "note": "Predicciones basadas en heurísticas (datos históricos, estadios, ligas) - ideal para inicio de temporada",
+                    "detected_round": detected_round,
+                    "round_type": round_type,
+                    "round_display": jornada_display
+                }
+            elif isinstance(basic_result, list) and len(basic_result) >= 14:
+                # Fallback para compatibilidad con versión anterior
+                return {
+                    "season": season,
+                    "data_season": season,
+                    "using_previous_season": False,
+                    "total_matches": len(basic_result),
+                    "matches": basic_result[:15],
+                    "generated_at": datetime.now().isoformat(),
+                    "model_version": "basic_predictor",
+                    "message": "Predicciones generadas con algoritmo básico para partidos futuros",
+                    "note": "Predicciones basadas en heurísticas",
+                    "detected_round": "desconocida",
+                    "round_type": "jornada",
+                    "round_display": "Jornada 1"
                 }
         
         # SEGUNDO: Si no hay suficientes partidos futuros, usar datos históricos como fallback

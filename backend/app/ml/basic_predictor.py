@@ -285,6 +285,47 @@ class BasicPredictor:
         
         return explanation
 
+def extract_spanish_jornada(round_string: str, matches: List[Match]) -> str:
+    """
+    Extrae la jornada real de la Liga Española desde el round string de la API
+    y los partidos disponibles para determinar en qué jornada estamos
+    """
+    if not round_string or not matches:
+        return "Jornada 1"
+    
+    # Mapeo de rounds API-Football a jornadas Liga Española
+    # "Regular Season - X" -> "Jornada X"
+    if "Regular Season -" in round_string:
+        try:
+            # Extraer número del round
+            round_num = round_string.split("Regular Season -")[-1].strip()
+            
+            # Para temporada nueva (2025), los primeros partidos son Jornada 1
+            # independientemente del round number en la API
+            if matches:
+                first_match_date = min([m.match_date for m in matches if m.match_date])
+                if first_match_date and first_match_date.month >= 8:  # Agosto = inicio temporada
+                    return "Jornada 1"
+            
+            # Usar el número del round de la API (ajustado)
+            if round_num.isdigit():
+                jornada_num = int(round_num)
+                # Si el número es muy alto, probablemente sea un error - usar 1
+                if jornada_num > 38:  # Máximo jornadas en Liga
+                    return "Jornada 1"
+                return f"Jornada {max(1, jornada_num - 1)}"  # Ajuste porque API empieza en 2
+            
+        except (ValueError, IndexError):
+            pass
+    
+    # Fallback: si los partidos son de agosto/septiembre = Jornada 1
+    if matches:
+        first_match = matches[0]
+        if first_match.match_date and first_match.match_date.month in [8, 9]:
+            return "Jornada 1"
+    
+    return "Jornada 1"  # Default seguro
+
 def create_basic_predictions_for_matches(db: Session, matches: List[Match], season: int) -> List[Dict[str, Any]]:
     """
     Crea predicciones básicas para una lista específica de partidos
@@ -502,9 +543,31 @@ def create_basic_predictions_for_quiniela(db: Session, season: int) -> List[Dict
             
             predictions.append(match_prediction)
         
-        logger.info(f"Generated {len(predictions)} basic predictions")
-        return predictions
+        logger.info(f"Generated {len(predictions)} basic predictions for round {best_round}")
+        
+        # Convertir round a jornada real de Liga Española
+        jornada_display = extract_spanish_jornada(best_round, selected_matches)
+        
+        # Devolver predicciones con metadatos de jornada
+        return {
+            "predictions": predictions,
+            "detected_round": best_round,
+            "round_type": "jornada",
+            "total_matches": len(selected_matches),
+            "la_liga_matches": len([m for m in selected_matches if m.league_id == 140]),
+            "segunda_matches": len([m for m in selected_matches if m.league_id == 141]),
+            "jornada_display": jornada_display
+        }
         
     except Exception as e:
         logger.error(f"Error generating basic predictions: {str(e)}")
-        return []
+        return {
+            "predictions": [],
+            "detected_round": None,
+            "round_type": "error",
+            "total_matches": 0,
+            "la_liga_matches": 0,
+            "segunda_matches": 0,
+            "jornada_display": "Jornada 1",
+            "error": str(e)
+        }
