@@ -945,7 +945,7 @@ def main():
                         teams_progress = min(status_data['teams_total'] / max(status_data['teams_expected'], 1), 1.0)
                         st.metric(
                             "Equipos", 
-                            f"{status_data['teams_total']}/{status_data['teams_expected']}", 
+                            f"{status_data['teams_total']}", 
                             delta="✅ Completo" if status_data['teams_total'] >= status_data['teams_expected'] else f"{teams_progress:.1%} completo"
                         )
                         
@@ -974,6 +974,9 @@ def main():
                     
                     st.write("Equipos:")
                     st.progress(teams_progress)
+                    
+                    st.write("Partidos:")
+                    st.progress(matches_progress)
                     
                     st.write("Estadísticas:")
                     st.progress(stats_progress)
