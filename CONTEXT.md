@@ -743,6 +743,180 @@ curl -X GET "localhost:8000/quiniela/next-matches/2025"
 curl -X DELETE "localhost:8000/data/clear-all?confirm=DELETE_ALL_DATA"
 ```
 
+## 🆕 Actualización v1.6.0 - Configuración Personalizada + Flujo Coherente
+
+### ⚙️ Sistema de Configuración Personalizada (2025-08-14)
+
+**Nueva Funcionalidad Principal**: Implementación completa de configuraciones personalizadas de Quiniela, permitiendo al usuario seleccionar manualmente los 15 partidos específicos.
+
+**Componentes Implementados:**
+
+#### 1. Configuración Avanzada - Selección Manual de Partidos
+```python
+# Nueva tabla para configuraciones personalizadas
+class CustomQuinielaConfig(Base):
+    __tablename__ = "custom_quiniela_config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    week_number = Column(Integer, nullable=False)
+    season = Column(Integer, nullable=False)
+    config_name = Column(String, nullable=False)
+    selected_match_ids = Column(JSON, nullable=False)  # Lista de 15 IDs de partidos
+    pleno_al_15_match_id = Column(Integer, nullable=False)  # ID del partido para Pleno al 15
+    la_liga_count = Column(Integer, nullable=False)
+    segunda_count = Column(Integer, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_by_user = Column(Boolean, default=True)
+```
+
+#### 2. Endpoints API Nuevos
+```python
+# Gestión de configuraciones personalizadas
+POST /quiniela/custom-config/save        # Guardar configuración de 15 partidos
+GET /quiniela/custom-config/list         # Listar configuraciones con filtros
+GET /quiniela/from-config/{config_id}   # Generar predicciones desde config
+GET /matches/upcoming-by-round/{season} # Partidos de próxima jornada
+```
+
+#### 3. Interfaz Dashboard Mejorada
+```python
+# Configuración Avanzada
+- Muestra partidos reales de próxima jornada (no aleatorios)
+- Selección exacta de 15 partidos con checkboxes
+- Designación del partido para Pleno al 15
+- Guardado con nombre descriptivo y gestión de estados
+
+# Mi Quiniela Personal  
+- Selector dropdown de configuraciones disponibles
+- Vista previa con métricas (La Liga, Segunda, semana)
+- Estados visuales: 🔵 Activa / 🔴 Inactiva
+- Fallback automático a sistema tradicional
+```
+
+### 🔄 Flujo Coherente Implementado
+
+**Problema Resuelto**: Las inconsistencias entre secciones del dashboard han sido completamente corregidas.
+
+**Antes (v1.5.0):**
+- ❌ Configuración Avanzada mostraba partidos aleatorios
+- ❌ Mi Quiniela Personal usaba endpoint independiente (`/next-matches/`)
+- ❌ Botones desordenados: "Actualizar Datos" (izquierda), "Obtener Predicciones" (derecha)
+- ❌ Error 500 en `/quiniela/user/history` por columnas faltantes
+
+**Ahora (v1.6.0):**
+- ✅ Configuración Avanzada muestra próxima jornada real con `/matches/upcoming-by-round/`
+- ✅ Mi Quiniela Personal usa configuraciones guardadas con `/quiniela/from-config/`
+- ✅ Botones corregidos: "🎯 Obtener Predicciones" (izquierda, primario), "🔄 Actualizar Datos" (derecha)
+- ✅ Error 500 resuelto: agregadas columnas `pleno_al_15_home` y `pleno_al_15_away`
+
+### 🔧 Correcciones Técnicas Críticas
+
+#### Base de Datos - Migración Automática
+```sql
+-- Script ejecutado para corregir tabla user_quinielas
+ALTER TABLE user_quinielas ADD COLUMN pleno_al_15_home VARCHAR(1);
+ALTER TABLE user_quinielas ADD COLUMN pleno_al_15_away VARCHAR(1);
+```
+
+#### Basic Predictor - Campo Faltante Corregido
+```python
+# ANTES: Error "'predicted_result' not found"
+return {
+    "prediction": prediction,  # Campo incorrecto
+    "confidence": confidence
+}
+
+# AHORA: Campos correctos
+return {
+    "predicted_result": prediction,  # Campo esperado
+    "prediction": prediction,        # Mantener compatibilidad
+    "confidence": confidence,
+    "probabilities": {
+        "home_win": home_prob,
+        "draw": draw_prob,
+        "away_win": away_prob
+    }
+}
+```
+
+#### Nueva Función para Predicciones Personalizadas
+```python
+# backend/app/ml/basic_predictor.py
+def create_basic_predictions_for_matches(db: Session, matches: List[Match], season: int):
+    """Genera predicciones para lista específica de partidos seleccionados"""
+    # Usado por endpoint /quiniela/from-config/{config_id}
+    # Aplica predictor básico a partidos elegidos manualmente
+```
+
+### 🎯 Experiencia de Usuario Mejorada
+
+**Flujo Optimizado:**
+1. **Configuración Avanzada** → Ver próxima jornada → Seleccionar 15 partidos → Guardar configuración
+2. **Mi Quiniela Personal** → Elegir configuración → "Obtener Predicciones" → Ver predicciones exactas
+3. **Sistema coherente**: Los partidos de la configuración son exactamente los que se usan para predicciones
+
+**Interfaz Intuitiva:**
+- **Selector de Configuración**: Dropdown con todas las configuraciones guardadas
+- **Métricas en Tiempo Real**: Muestra La Liga (X partidos), Segunda (Y partidos), Semana Z
+- **Estados Visuales**: 🔵 Configuración Activa, 🔴 Configuración Inactiva
+- **Sugerencias Contextuales**: Guía al usuario cuando no hay configuraciones
+
+### 🧪 Testing Completo Realizado
+
+```bash
+# 1. Endpoint de próxima jornada funciona
+curl "http://localhost:8000/matches/upcoming-by-round/2025"
+# ✅ Devuelve partidos reales de próxima jornada por liga
+
+# 2. Guardar configuración funciona
+curl -X POST "http://localhost:8000/quiniela/custom-config/save" -d '{...}'
+# ✅ Guarda 15 partidos + pleno al 15
+
+# 3. Predicciones desde configuración funciona
+curl "http://localhost:8000/quiniela/from-config/1"
+# ✅ Genera predicciones para partidos específicos
+
+# 4. Error 500 resuelto
+curl "http://localhost:8000/quiniela/user/history"
+# ✅ Sin errores de columnas faltantes
+```
+
+### 🏗️ Archivos Modificados/Creados
+
+**Archivos Principales:**
+- `dashboard.py` - Nueva sección selector de configuraciones + UI mejorada
+- `backend/app/main.py` - Endpoints nuevos + corrección error 500
+- `backend/app/ml/basic_predictor.py` - Función nueva + campo corregido
+- `backend/app/database/models.py` - Modelo `CustomQuinielaConfig`
+- `scripts/fix_user_quinielas_table.sql` - Migración columnas
+
+**Cambios Críticos:**
+- ✅ **Coherencia Total**: Ya no hay discrepancias entre secciones
+- ✅ **Control Completo**: Usuario puede elegir exactamente qué partidos usar
+- ✅ **Robustez**: Sistema funciona tanto con configuraciones como sin ellas
+- ✅ **UX Mejorada**: Interfaz clara, retroalimentación inmediata, estados visuales
+
+### 📊 Estado Final del Sistema
+
+**Funcionalidades Completamente Operativas:**
+- ✅ Configuración manual de partidos (15 exactos)
+- ✅ Designación específica de Pleno al 15
+- ✅ Múltiples configuraciones guardadas
+- ✅ Selector inteligente en Mi Quiniela Personal
+- ✅ Predicciones coherentes con selección
+- ✅ Manejo automático de próximas jornadas
+- ✅ Estados activos/inactivos de configuraciones
+- ✅ Fallback a sistema automático
+
+**Problemas Completamente Resueltos:**
+- ❌ **Partidos incorrectos** → ✅ **Próxima jornada real**
+- ❌ **Flujo incoherente** → ✅ **Configuración → Mi Quiniela coherente** 
+- ❌ **Botones desordenados** → ✅ **Orden lógico correcto**
+- ❌ **Error 500** → ✅ **Sin errores, funciona perfectamente**
+- ❌ **Basic predictor roto** → ✅ **Predicciones funcionando**
+
+---
+
 ## 🆕 Actualización v1.5.0 - Corrección Pleno al 15 + Orden Oficial
 
 ### 🏆 Pleno al 15 Oficial Implementado (2025-08-13)
@@ -765,22 +939,22 @@ pleno_home = st.selectbox("🏠 Goles de {home_team_name}", options=["0", "1", "
 pleno_away = st.selectbox("✈️ Goles de {away_team_name}", options=["0", "1", "2", "M"])
 ```
 
-### 📋 Orden Oficial de Partidos Implementado
+### 📋 Orden de Partidos - Pendiente de Ajuste
 
 **Problema Detectado**: Los partidos aparecían desordenados respecto a la Quiniela real española.
 
-**Solución SQL Optimizada**: Query con JOIN para ordenamiento correcto desde base de datos.
+**Solución Inicial Implementada**: Query con JOIN para ordenamiento alfabético por equipo local.
 
 ```python
-# Orden oficial implementado (v1.5.0)
+# Orden alfabético implementado (v1.5.0) - REQUIERE AJUSTE
 upcoming_matches = db.query(Match).join(Team, Match.home_team_id == Team.id).order_by(
     Match.league_id.desc(),  # La Liga (140) primero, Segunda (141) después
-    Team.name,               # Orden alfabético por equipo local (tradicional Quiniela)
+    Team.name,               # Orden alfabético por equipo local
     Match.match_date         # Fecha como criterio secundario
 )
 ```
 
-**Resultado**: Partidos ahora aparecen en orden idéntico a Quiniela oficial española.
+**Estado Actual**: El orden alfabético implementado no coincide exactamente con el orden oficial de la Quiniela española. Se requiere investigación adicional para determinar el criterio correcto de ordenamiento utilizado por Loterías y Apuestas del Estado.
 
 ### 🗑️ Gestión de Datos Mejorada
 
@@ -793,6 +967,7 @@ upcoming_matches = db.query(Match).join(Team, Match.home_team_id == Team.id).ord
 
 ---
 
-**Última actualización**: 2025-08-13
-**Versión**: 1.5.0
+**Última actualización**: 2025-08-14
+**Versión**: 1.6.0 - Configuración Personalizada + Flujo Coherente
+**Estado**: Sistema completamente funcional con configuraciones personalizadas
 **Maintainer**: Sistema Quiniela Predictor

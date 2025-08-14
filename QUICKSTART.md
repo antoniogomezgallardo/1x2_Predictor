@@ -125,7 +125,8 @@ curl http://localhost:8501           # Dashboard ✅
 Abre tu navegador en: **http://localhost:8501**
 
 Verás 6 secciones principales:
-- 🎯 **Mi Quiniela Personal** - Crear y gestionar tus quinielas
+- 🎯 **Mi Quiniela Personal** - Crear y gestionar tus quinielas con selector de configuraciones
+- ⚙️ **Configuración Avanzada** - Selecciona manualmente los 15 partidos de tu Quiniela
 - 📊 **Predicciones del Sistema** - Ver predicciones automáticas
 - 📈 **Análisis de Rendimiento** - Gráficos de precisión
 - 💰 **Análisis Financiero** - ROI y beneficios
@@ -175,12 +176,23 @@ curl -X POST "http://localhost:8000/model/train" \
 
 ### 4. Crear tu Primera Quiniela
 
+**Opción A: Configuración Personalizada (Recomendado)**
+1. Ve a "⚙️ Configuración Avanzada"
+2. Selecciona exactamente 15 partidos de la próxima jornada
+3. Designa cuál será el "Pleno al 15"
+4. Guarda la configuración con un nombre descriptivo
+5. Ve a "🎯 Mi Quiniela Personal"
+6. Selecciona tu configuración en el dropdown
+7. Haz clic en "🎯 Obtener Predicciones"
+8. Revisa y ajusta predicciones
+9. Guarda tu quiniela
+
+**Opción B: Sistema Automático**
 1. Ve a "🎯 Mi Quiniela Personal"
-2. Haz clic en "Ver Próximos Partidos"
-3. Revisa predicciones y explicaciones
-4. Ajusta las predicciones a tu criterio
-5. Haz clic en "Guardar Mi Quiniela"
-6. ¡Listo! Podrás trackear resultados más tarde
+2. Selecciona "Sistema automático" en el dropdown
+3. Haz clic en "🎯 Obtener Predicciones"
+4. Revisa predicciones automáticas
+5. Guarda tu quiniela
 
 ---
 
@@ -197,12 +209,15 @@ curl -X POST "http://localhost:8000/model/train" \
 
 ### Caso 2: Gestión Personal de Quinielas
 ```
-1. Dashboard → "Mi Quiniela Personal" 
-2. "Ver Próximos Partidos"
-3. Crear nueva quiniela
-4. Guardar predicciones
-5. Cuando termine la jornada: "Actualizar Resultados"
-6. Ver ROI y estadísticas en "Mi Historial"
+1. Dashboard → "Configuración Avanzada" 
+2. Seleccionar 15 partidos manualmente
+3. Guardar configuración personalizada
+4. Dashboard → "Mi Quiniela Personal"
+5. Elegir configuración en selector
+6. "Obtener Predicciones"
+7. Guardar quiniela
+8. Cuando termine la jornada: "Actualizar Resultados"
+9. Ver ROI y estadísticas en "Mi Historial"
 ```
 
 ### Caso 3: Análisis de Rendimiento
@@ -213,7 +228,18 @@ curl -X POST "http://localhost:8000/model/train" \
 4. Identificar fortalezas del modelo
 ```
 
-### Caso 4: Gestión Financiera
+### Caso 4: Configuración Personalizada
+```
+1. Dashboard → "Configuración Avanzada"
+2. Ver partidos de próxima jornada
+3. Seleccionar exactamente 15 partidos
+4. Designar partido para Pleno al 15
+5. Guardar configuración con nombre
+6. Activar/desactivar configuraciones
+7. Usar en "Mi Quiniela Personal"
+```
+
+### Caso 5: Gestión Financiera
 ```
 1. Dashboard → "Análisis Financiero"
 2. Configurar bankroll inicial
@@ -257,6 +283,21 @@ curl -X POST "http://localhost:8000/model/train" -d '{"season": 2025}'
 
 # Ver estado del modelo
 curl "http://localhost:8000/analytics/model-performance"
+```
+
+### Configuraciones Personalizadas (v1.6.0)
+```bash
+# Obtener partidos de próxima jornada
+curl "http://localhost:8000/matches/upcoming-by-round/2025"
+
+# Listar configuraciones guardadas
+curl "http://localhost:8000/quiniela/custom-config/list?season=2025"
+
+# Generar predicciones desde configuración
+curl "http://localhost:8000/quiniela/from-config/1"
+
+# Guardar nueva configuración (POST con JSON)
+curl -X POST "http://localhost:8000/quiniela/custom-config/save" -d '{...}'
 ```
 
 ### Base de Datos
@@ -416,6 +457,34 @@ El sistema está configurado para trabajar con la temporada 2025 por defecto. Si
 
 ---
 
-**💡 Tip Final:** Usa el dashboard primero para familiarizarte con el sistema. Es la forma más fácil de empezar y ver todos los casos de uso en acción.
+## 🎯 Flujo Recomendado - Nueva Funcionalidad (v1.6.0)
+
+### ⚙️ Configuración Personalizada + Mi Quiniela Personal
+
+**👍 Flujo Optimizado:**
+1. **Configuración Avanzada** → Selecciona 15 partidos de la próxima jornada
+2. **Guarda configuración** con nombre descriptivo (ej: "Jornada 1 - Agosto 2025")
+3. **Mi Quiniela Personal** → Elige tu configuración en el selector
+4. **Obtener Predicciones** → Ver predicciones para tus partidos seleccionados
+5. **Sistema coherente** → Los partidos son exactamente los que elegiste
+
+### 🔮 Características Clave (v1.6.0)
+
+- **🔄 Selector Inteligente**: Dropdown con todas tus configuraciones
+- **📊 Vista Previa**: Muestra La Liga (X), Segunda (Y), Semana Z
+- **🔵 Estados Visuales**: Activa/Inactiva para cada configuración  
+- **🔄 Fallback Automático**: Si no tienes configuraciones, usa sistema automático
+- **🎯 Coherencia Total**: Configuración Avanzada ↔️ Mi Quiniela Personal
+
+### 🆕 Beneficios de la Nueva Versión
+
+- ✅ **Control Total**: Elige exactamente qué 15 partidos usar
+- ✅ **Próxima Jornada Real**: Muestra partidos de la siguiente jornada disponible
+- ✅ **Pleno al 15 Designado**: Selecciona cuál será tu partido especial
+- ✅ **Múltiples Configuraciones**: Guarda y reutiliza diferentes selecciones
+- ✅ **Flujo Lógico**: Sin inconsistencias entre secciones
+- ✅ **Experiencia Mejorada**: Interfaz clara, feedback inmediato
+
+**💡 Tip Final:** Usa el dashboard primero para familiarizarte con el sistema. La nueva funcionalidad de configuración personalizada te da control total sobre tu Quiniela.
 
 **⚠️ Importante:** Recuerda que este sistema es para fines educativos. Apuesta responsablemente y solo dinero que puedas permitirte perder.

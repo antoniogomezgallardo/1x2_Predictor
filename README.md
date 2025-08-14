@@ -11,11 +11,13 @@ Predecir los resultados de los 15 partidos semanales de la Quiniela Española (P
 - **🤖 Predicciones ML**: Modelos ensemble (Random Forest + XGBoost) con +40 características
 - **📊 Dashboard Interactivo**: Visualización en tiempo real de predicciones y rendimiento
 - **🎯 Gestión Personal de Quinielas**: Sistema completo para crear, guardar y trackear tus quinielas
+- **⚙️ Configuración Personalizada**: Selecciona manualmente los 15 partidos de tu Quiniela
+- **🔄 Selector Inteligente**: Elige entre configuraciones personalizadas o sistema automático
 - **💡 Explicaciones Detalladas**: Cada predicción incluye análisis razonado y factores decisivos
 - **💰 Análisis Financiero**: Seguimiento de ROI, beneficios y estrategias de apuestas
 - **🔄 Gestión de Datos**: Integración automática con API-Football
 - **📈 Historial Completo**: Tracking de precisión y rendimiento por jornada
-- **🗓️ Soporte Multi-Temporada**: Compatible con temporadas 2023-2025, fallback automático
+- **🗺️ Soporte Multi-Temporada**: Compatible con temporadas 2023-2025, fallback automático
 - **🚀 Setup Ultra-Rápido**: Configuración completa en 5 minutos con scripts automatizados
 
 ## 🏗️ Arquitectura
@@ -238,34 +240,31 @@ Acceder al dashboard en: `http://localhost:8501`
 #### Funcionalidades del Dashboard:
 
 **🎯 Mi Quiniela Personal**
+- **Selección de Partidos**: Elige entre configuraciones personalizadas o sistema automático
 - **Próximos Partidos**: Ver predicciones con explicaciones detalladas
 - **Mi Historial**: Tracking completo de tus quinielas guardadas
 - **Actualizar Resultados**: Registrar resultados reales y calcular ganancias
 
-**📊 Predicciones del Sistema**
-- Predicciones automáticas para la jornada actual
-- Estrategias de apuestas recomendadas
-- Análisis de confianza por partido
+**⚙️ Configuración Avanzada**
+- **Selección Manual**: Elige exactamente 15 partidos de la próxima jornada
+- **Partidos por Jornada**: Muestra partidos de Primera y Segunda División ordenados
+- **Configuraciones Guardadas**: Administra y reutiliza tus selecciones personalizadas
+- **Pleno al 15**: Designa qué partido usar para el Pleno al 15
 
-**📈 Análisis de Rendimiento**
-- Gráficos de precisión histórica
-- Tracking de beneficios acumulados
-- Métricas de rendimiento del modelo
+**📊 Análisis y Rendimiento**
+- **Predicciones del Sistema**: Predicciones automáticas para la jornada actual
+- **Rendimiento Histórico**: Gráficos de precisión histórica
+- **Análisis Financiero**: ROI detallado por jornada
 
-**💰 Análisis Financiero**
-- ROI detallado por jornada
-- Beneficios/pérdidas acumulados
-- Análisis de rentabilidad
+**🔧 Administración**
+- **Gestión de Datos**: Actualización de equipos y partidos
+- **Estado de la base de datos**: Monitoreo del sistema
+- **Modelo ML**: Entrenamiento del modelo e importancia de características
 
-**🔧 Gestión de Datos**
-- Actualización de equipos y partidos
-- Estado de la base de datos
-- Herramientas de mantenimiento
-
-**🤖 Modelo ML**
-- Entrenamiento del modelo
-- Importancia de características
-- Métricas de rendimiento
+**📋 Información**
+- **Reglas Oficiales**: Normativa completa de la Quiniela Española
+- **Modalidades de Juego**: Simple, Múltiple, Reducidas
+- **Estado de Implementación**: Qué funcionalidades están disponibles
 
 ## 📈 Estrategias de Apuestas
 
@@ -321,12 +320,17 @@ Acceder al dashboard en: `http://localhost:8501`
 - `POST /data/update-teams/{season}` - Actualizar equipos
 - `POST /data/update-matches/{season}` - Actualizar partidos
 - `POST /data/update-statistics/{season}` - Actualizar estadísticas
+- `GET /matches/upcoming-by-round/{season}` - Obtener partidos de próxima jornada
 
 ### Predicciones
 - `GET /predictions/current-week` - Predicciones actuales
 - `GET /predictions/history` - Historial de predicciones
 - `GET /quiniela/next-matches/{season}` - Próximos partidos con explicaciones
-- `GET /predictions/quiniela-oficial/{season}` - Predicciones formato Quiniela oficial
+- `GET /quiniela/from-config/{config_id}` - Predicciones desde configuración personalizada
+
+### Configuraciones Personalizadas
+- `POST /quiniela/custom-config/save` - Guardar configuración personalizada
+- `GET /quiniela/custom-config/list` - Listar configuraciones guardadas
 
 ### Gestión Personal de Quinielas
 - `POST /quiniela/user/create` - Crear nueva quiniela personal
@@ -432,33 +436,78 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ## 💡 Roadmap
 
-### Versión 1.1 ✅ COMPLETADO
-- [x] Sistema completo de gestión personal de quinielas
-- [x] Explicaciones detalladas de predicciones con análisis razonado
-- [x] Dashboard interactivo con 6 secciones principales
-- [x] Tracking completo de ROI y beneficios personales
-- [x] Base de datos expandida con tablas de usuario
-- [x] API endpoints para gestión completa del usuario
+### Versión 1.7 - Próximas Funcionalidades ⏳
+- [ ] Sistema de notificaciones push para nuevos partidos
+- [ ] Exportación de quinielas a PDF/Excel
+- [ ] Análisis de tendencias por equipos específicos
+- [ ] Integración con calendario de Google para recordatorios
 
-### Versión 1.2
-- [ ] Modelo de Deep Learning (LSTM/Transformer)
-- [ ] Integración con múltiples casas de apuestas
-- [ ] Alertas automáticas vía email/Telegram
-- [ ] Análisis de lesiones y suspensiones
-
-### Versión 1.3
-- [ ] Frontend React/Vue avanzado
-- [ ] API móvil (React Native)
-- [ ] Backtesting histórico automático
-- [ ] Integración con bases de datos adicionales
-
-### Versión 2.0
-- [ ] Multi-liga (Premier League, Serie A, etc.)
+### Versión 2.0 - Expansión Multi-Liga
+- [ ] Premier League, Serie A, Bundesliga
+- [ ] Sistema de apuestas multi-mercado
 - [ ] Trading automático de apuestas
-- [ ] Análisis de video con Computer Vision
-- [ ] Marketplace de modelos ML
+- [ ] Marketplace de modelos ML compartidos
 
 ## 📝 Últimos Cambios
+
+### Versión 1.6.0 (2025-08-14) - Configuración Personalizada + Flujo Coherente 🎯
+
+**⚙️ Sistema de Configuración Personalizada:**
+- ✅ **Selección Manual de Partidos**: Elige exactamente 15 partidos de la próxima jornada
+- ✅ **Próxima Jornada Inteligente**: Muestra automáticamente partidos de la siguiente jornada disponible
+- ✅ **Configuraciones Guardadas**: Sistema completo para guardar, listar y gestionar configuraciones
+- ✅ **Designación Pleno al 15**: Selecciona qué partido usar como Pleno al 15
+
+**🔄 Flujo Coherente Mi Quiniela Personal:**
+- ✅ **Selector de Configuración**: Dropdown para elegir entre configuraciones personalizadas o automático
+- ✅ **Vista Previa Inteligente**: Muestra detalles de la configuración seleccionada (La Liga, Segunda, semana)
+- ✅ **Integración Completa**: Las predicciones usan exactamente los partidos de la configuración seleccionada
+- ✅ **Fallback Automático**: Si no hay configuraciones, usa el sistema automático tradicional
+
+**🔄 Corrección de Inconsistencias:**
+- ✅ **Botones Reordenados**: "Obtener Predicciones" (principal, izquierda) y "Actualizar Datos" (derecha)
+- ✅ **Error 500 Corregido**: Añadidas columnas faltantes `pleno_al_15_home` y `pleno_al_15_away` en base de datos
+- ✅ **Basic Predictor Arreglado**: Campo `predicted_result` y formato de probabilidades corregidos
+- ✅ **Configuración Avanzada Mejorada**: Muestra partidos reales de próxima jornada, no aleatorios
+
+**🏢 Nuevos Endpoints API:**
+- ✅ `GET /matches/upcoming-by-round/{season}` - Partidos de próxima jornada por liga
+- ✅ `POST /quiniela/custom-config/save` - Guardar configuración personalizada
+- ✅ `GET /quiniela/custom-config/list` - Listar configuraciones con filtros
+- ✅ `GET /quiniela/from-config/{config_id}` - Generar predicciones desde configuración
+
+**🔧 Mejoras Técnicas:**
+- ✅ **Nueva Función**: `create_basic_predictions_for_matches()` para partidos específicos
+- ✅ **Tabla Extendida**: `CustomQuinielaConfig` para almacenar configuraciones personalizadas
+- ✅ **Migración DB**: Script automático para añadir columnas faltantes
+- ✅ **Interfaz Intuitiva**: Selectores, métricas y estados visuales mejorados
+
+**🏆 Experiencia de Usuario:**
+- ✅ **Flujo Lógico**: Configuración Avanzada → Mi Quiniela Personal → Resultados coherentes
+- ✅ **Feedback Claro**: Mensajes explicativos sobre qué configuración se está usando
+- ✅ **Estados Visuales**: 🔵 Activa / 🔴 Inactiva para configuraciones
+- ✅ **Sugerencias Útiles**: Guía al usuario cuando no hay configuraciones
+
+**🎮 Experiencia Mejorada:**
+
+1. **🎯 Flujo Principal Optimizado:**
+   - Configuración Avanzada → Seleccionar 15 partidos → Guardar configuración
+   - Mi Quiniela Personal → Elegir configuración → Obtener predicciones coherentes
+   - Sistema inteligente usa exactamente los partidos seleccionados
+
+2. **⚙️ Control Total:**
+   - Selecciona manualmente partidos de la próxima jornada real
+   - Designa cuál de los 15 partidos será el Pleno al 15
+   - Guarda múltiples configuraciones con nombres descriptivos
+   - Activa/desactiva configuraciones según necesidad
+
+3. **🔄 Coherencia Completa:**
+   - Ya no hay discrepancias entre secciones
+   - Los botones están en el orden lógico correcto
+   - Todos los errores 500 han sido corregidos
+   - Configuración Avanzada muestra partidos reales, no aleatorios
+
+---
 
 ### Versión 1.5.0 (2025-08-13) - Corrección Pleno al 15 + Orden Oficial + Gestión Mejorada
 
@@ -477,83 +526,13 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 - ✅ **Interfaz Clara**: Explicación detallada de qué se borra vs qué se preserva
 - ✅ **Confirmación Segura**: Nuevo formato de confirmación "BORRAR_DATOS"
 
-### Versión 1.4.0 (2025-08-13) - Sistema Híbrido de Predicciones + Gestión Completa
-
-**🎯 Nuevas Funcionalidades Principales:**
-- ✅ **Sistema Híbrido de Predicciones**: Combina datos históricos (2024/2023) + heurísticas para nuevas temporadas
-- ✅ **Gestión Completa de Base de Datos**: Función para borrar todos los datos desde dashboard con confirmación
-- ✅ **Selección Inteligente de Partidos**: Solo ligas españolas (La Liga + Segunda) agrupados por jornadas
-- ✅ **Entrenamiento con Fallback**: Modelos para temporada 2025 usando datos de 2024 automáticamente
-- ✅ **Predicciones Mejoradas**: Explicaciones detalladas indicando método usado y fuentes de datos
-
-**🧠 Sistema Híbrido de Predicciones:**
-- **Datos Históricos**: Usa estadísticas de temporadas 2024/2023 cuando están disponibles
-- **Pesos Adaptativos**: 40% datos históricos + 35% experiencia + 25% otros factores
-- **Temporal Weighting**: Temporadas recientes tienen mayor peso (70% vs 30%)
-- **Fallback Inteligente**: Si no hay datos históricos, usa solo heurísticas básicas
-- **Explicaciones Transparentes**: Indica claramente qué datos se usaron
-
-**🗑️ Gestión de Base de Datos:**
-- **Borrado Completo**: Elimina todos los datos (equipos, partidos, estadísticas, quinielas)
-- **Confirmación Segura**: Requiere escribir "BORRAR_TODO" para confirmar
-- **Orden Correcto**: Respeta foreign keys eliminando en secuencia correcta
-- **Reset Automático**: Reinicia secuencias PostgreSQL para IDs limpios
-- **Feedback Detallado**: Muestra registros eliminados y próximos pasos
-
-**🎯 Selección de Partidos Mejorada:**
-- **Solo Ligas Españolas**: Filtra únicamente La Liga (140) y Segunda División (141)
-- **Agrupación por Jornadas**: Intenta obtener partidos de la misma jornada
-- **Priorización Inteligente**: Máximo 10 La Liga + completar con Segunda hasta 15
-- **Fallback Cronológico**: Si no hay jornada completa, usa próximos partidos
-
-**🔧 Mejoras Técnicas Críticas:**
-- **Entrenamiento 2025**: Fallback automático a datos 2024 con mensajes informativos
-- **Endpoint Robusto**: `/model/train` maneja temporadas futuras sin errores 400
-- **Validación Previa**: Todos los endpoints validan disponibilidad antes de procesar
-- **Error Handling**: Try-catch exhaustivo con logging detallado
-
-**📁 Archivos Nuevos/Modificados:**
-- `backend/app/ml/basic_predictor.py` - Sistema híbrido con datos históricos
-- `backend/app/main.py` - Endpoint de borrado + entrenamiento mejorado
-- `dashboard.py` - Interfaz de borrado segura + soporte DELETE
-
-**🐛 Fixes Críticos Completados:**
-- ❌ **Error 400 entrenamiento 2025** → ✅ **RESUELTO** - Fallback a temporada 2024
-- ❌ **Partidos incorrectos Quiniela** → ✅ **RESUELTO** - Solo ligas españolas por jornadas
-- ❌ **Error 400 actualizar datos** → ✅ **RESUELTO** - Validación mejorada
-- ❌ **Falta borrado de datos** → ✅ **IMPLEMENTADO** - Función completa con seguridad
-
-**🧪 Testing Completado:**
-```bash
-# Todos los problemas resueltos
-curl -X POST "localhost:8000/model/train?season=2025"                    # ✅ Fallback a 2024
-curl -X GET "localhost:8000/quiniela/next-matches/2025"                  # ✅ Predicciones híbridas
-curl -X DELETE "localhost:8000/data/clear-all?confirm=DELETE_ALL_DATA"   # ✅ Borrado seguro
-```
-
-**📊 Estado del Sistema:**
-- ✅ **Listo para temporada 2025** con predicciones inteligentes
-- ✅ **Gestión completa** de datos desde interfaz web
-- ✅ **Selección correcta** de partidos para Quiniela española
-- ✅ **Backward compatibility** mantenida al 100%
-- ✅ **Error handling robusto** en todos los endpoints
-
----
-
-### Versión 1.2.1 (2025-08-12) - Reglas Oficiales Quiniela
-
-- ✅ **Implementación Reglas BOE**: Precios oficiales (€0.75), Pleno al 15, reducidas
-- ✅ **Dashboard Mejorado**: Tab "Reglas Oficiales" con normativa completa
-- ✅ **Fix Streamlit**: Corrección estructura forms y botones submit
-- ✅ **Documentación**: REGLAS_QUINIELA_IMPLEMENTACION.md completo
-
 ## 🆘 Soporte
 
 Para soporte y preguntas:
 - **Issues**: Usar GitHub Issues para bugs y features
 - **Documentación**: Revisar CONTEXT.md para troubleshooting detallado
 - **Docker Issues**: Usar `docker-compose build --no-cache` para cambios
-- **Contacto**: [tu-email@ejemplo.com]
+- **Contacto**: [Crear issue en el repositorio]
 
 ---
 
