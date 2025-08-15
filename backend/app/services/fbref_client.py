@@ -92,8 +92,8 @@ class FBRefClient:
         league_info = self.league_mappings[league_id]
         season_str = f"{season}-{season+1}"
         
-        # URL para estadísticas avanzadas de la liga
-        url = f"{self.base_url}/en/comps/{league_info['fbref_id']}/{season_str}/stats/{season_str}-{league_info['name'].replace(' ', '-')}-Stats"
+        # URL para estadísticas avanzadas de la liga (usar URL actual sin año específico)
+        url = f"{self.base_url}/en/comps/{league_info['fbref_id']}/{league_info['name'].replace(' ', '-')}-Stats"
         
         soup = self._make_request(url)
         if not soup:

@@ -90,7 +90,7 @@ class BasicPredictor:
         # Ajustar probabilidades para incluir empate
         # Empate más probable cuando equipos están equilibrados
         balance_factor = abs(home_prob_raw - away_prob_raw)
-        draw_prob = 0.25 + (0.15 * (1 - balance_factor))  # 25-40% empate
+        draw_prob = 0.20 + (0.10 * (1 - balance_factor))  # 20-30% empate
         
         # Redistribuir probabilidades
         remaining_prob = 1.0 - draw_prob
@@ -103,7 +103,7 @@ class BasicPredictor:
         
         home_prob += random_factor
         away_prob -= random_factor
-        draw_prob += random_factor * 0.5
+        draw_prob += random_factor * 0.2
         
         # Normalizar para que sumen 1.0
         total = home_prob + draw_prob + away_prob
