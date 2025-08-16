@@ -64,6 +64,14 @@ bayesian-optimization==1.4.3 # Bayesian optimization - PLANNED
 # Development & Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
+pytest-cov==4.1.0              # Coverage reporting
+pytest-mock==3.12.0            # Mocking utilities
+pytest-benchmark==4.0.0        # Performance testing
+pytest-xdist==3.5.0            # Parallel test execution
+factory-boy==3.3.0             # Test data generation
+freezegun==1.2.2               # Time mocking
+responses==0.24.1              # HTTP mocking
+coverage[toml]==7.3.2          # Coverage configuration
 black==23.11.0
 flake8==6.1.0
 
