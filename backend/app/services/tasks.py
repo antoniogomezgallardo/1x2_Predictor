@@ -11,10 +11,16 @@ def update_teams_task(season: int) -> Dict[str, Any]:
     """
     try:
         # Import here to avoid circular imports
-        from .data_extractor import DataExtractor
+        from ..database.database import SessionLocal
+        from ..services_v2.team_service import TeamService
         
-        extractor = DataExtractor()
-        result = extractor.update_teams(season)
+        db = SessionLocal()
+        try:
+            team_service = TeamService(db)
+            await team_service.update_teams(season)
+            result = {"teams_updated": "success"}
+        finally:
+            db.close()
         
         return {
             "status": "success",
@@ -35,10 +41,16 @@ def update_matches_task(season: int) -> Dict[str, Any]:
     Celery task to update matches data for a given season
     """
     try:
-        from .data_extractor import DataExtractor
+        from ..database.database import SessionLocal
+        from ..services_v2.match_service import MatchService
         
-        extractor = DataExtractor()
-        result = extractor.update_matches(season)
+        db = SessionLocal()
+        try:
+            match_service = MatchService(db)
+            await match_service.update_matches(season)
+            result = {"matches_updated": "success"}
+        finally:
+            db.close()
         
         return {
             "status": "success",
@@ -59,10 +71,16 @@ def update_statistics_task(season: int) -> Dict[str, Any]:
     Celery task to update team statistics for a given season
     """
     try:
-        from .data_extractor import DataExtractor
+        from ..database.database import SessionLocal
+        from ..services_v2.statistics_service import StatisticsService
         
-        extractor = DataExtractor()
-        result = extractor.update_team_statistics(season)
+        db = SessionLocal()
+        try:
+            statistics_service = StatisticsService(db)
+            await statistics_service.update_team_statistics(season)
+            result = {"statistics_updated": "success"}
+        finally:
+            db.close()
         
         return {
             "status": "success",

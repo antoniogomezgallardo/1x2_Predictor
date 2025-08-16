@@ -72,10 +72,18 @@
 
 ---
 
-## 🏗️ **ARQUITECTURA DEL SISTEMA**
+## 🏗️ **ARQUITECTURA DEL SISTEMA v2.1.0 - CLEAN ARCHITECTURE**
+
+### ⚠️ **IMPORTANTE: NUEVA ESTRUCTURA DE CÓDIGO OBLIGATORIA**
+**A partir de agosto 2025, TODOS los cambios deben seguir la nueva arquitectura Clean Architecture implementada:**
+- ✅ **Servicios especializados** por dominio en `services_v2/`
+- ✅ **Entities y Schemas separados** por dominio en `domain/`
+- ✅ **Endpoints organizados** por responsabilidad en `api/v1/{domain}/`
+- ✅ **Principio de responsabilidad única** en todos los componentes
+- ✅ **Compatibilidad mantenida** con wrappers de retrocompatibilidad
 
 ### Visión General
-Sistema de predicción de resultados para la Quiniela Española que utiliza Machine Learning para analizar datos de fútbol y generar predicciones rentables.
+Sistema de predicción de resultados para la Quiniela Española que utiliza Machine Learning para analizar datos de fútbol y generar predicciones rentables. **REORGANIZADO COMPLETAMENTE** siguiendo Clean Architecture y mejores prácticas de desarrollo.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -297,19 +305,47 @@ docker-compose logs api | grep -E "(🚀|📊|⚙️|✅|📈|❌)"
 open http://localhost:8501
 ```
 
-### **Estructura de Archivos Actualizada**
+### **Nueva Estructura Clean Architecture v2.1.0**
 
 ```
 1x2_Predictor/
-├── backend/
-│   ├── app/
-│   │   ├── database/
-│   │   │   └── models.py              # ✅ Actualizado: dobles/triples/elige8
-│   │   ├── ml/
-│   │   │   └── feature_engineering.py # ✅ Corregido: bug NoneType
-│   │   ├── services/
-│   │   │   └── quiniela_validator.py  # ✅ Nuevo: validador completo
-│   │   └── main.py                    # ✅ Actualizado: logs detallados
+├── backend/app/
+│   ├── domain/                        # ✅ NUEVO: Entities y Schemas por dominio
+│   │   ├── entities/                  # SQLAlchemy models organizados
+│   │   │   ├── team.py               # Entidad Team
+│   │   │   ├── match.py              # Entidad Match
+│   │   │   ├── statistics.py         # Entidad TeamStatistics, ModelPerformance
+│   │   │   ├── quiniela.py           # Entidades Quiniela completas
+│   │   │   └── advanced.py           # Entidades FBRef avanzadas
+│   │   └── schemas/                   # Pydantic schemas organizados
+│   │       ├── team.py               # Schemas Team
+│   │       ├── match.py              # Schemas Match
+│   │       ├── statistics.py         # Schemas Statistics
+│   │       ├── quiniela.py           # Schemas Quiniela
+│   │       ├── analytics.py          # Schemas Analytics
+│   │       └── advanced.py           # Schemas Advanced
+│   ├── services_v2/                   # ✅ NUEVO: Servicios especializados
+│   │   ├── team_service.py           # Gestión completa de equipos
+│   │   ├── match_service.py          # Gestión completa de partidos
+│   │   ├── statistics_service.py     # Gestión de estadísticas
+│   │   ├── quiniela_service.py       # Lógica específica de quiniela
+│   │   └── odds_service.py           # Gestión especializada de cuotas
+│   ├── api/v1/                        # ✅ REORGANIZADO: Endpoints por dominio
+│   │   ├── core/endpoints.py         # Health, root
+│   │   ├── data/endpoints.py         # Teams, matches, stats
+│   │   ├── models/endpoints.py       # Model training
+│   │   ├── predictions/endpoints.py  # ML predictions
+│   │   ├── quiniela/endpoints.py     # Quiniela management
+│   │   ├── analytics/endpoints.py    # Performance analytics
+│   │   └── advanced/endpoints.py     # Advanced data collection
+│   ├── infrastructure/                # ✅ NUEVO: Database, external APIs
+│   │   ├── database/base.py          # Base SQLAlchemy
+│   │   ├── external/                 # External API clients
+│   │   └── repositories/             # Repository pattern
+│   ├── database/models_v2.py         # ✅ Compatibility wrapper
+│   ├── api/schemas_v2.py             # ✅ Compatibility wrapper
+│   ├── services/data_extractor_v2.py # ✅ Compatibility wrapper
+│   └── main.py                       # ✅ Reorganizado: nueva estructura
 ├── dashboard.py                       # ✅ Actualizado: paleta profesional
 ├── REGLAS_QUINIELA.md                # ✅ Nuevo: normativa oficial BOE
 ├── DASHBOARD_GUIDE.md                # ✅ Actualizado: guía estado del arte
@@ -317,6 +353,18 @@ open http://localhost:8501
 ├── README.md                         # ✅ Actualizado: versión 2.1.0
 └── CONTEXT.md                        # ✅ Actualizado: este archivo
 ```
+
+### **Reglas de Desarrollo Obligatorias**
+
+**🚨 CRITICAL: Todos los nuevos desarrollos DEBEN seguir estas reglas:**
+
+1. **Servicios Especializados**: Usar `services_v2/` - un servicio por dominio
+2. **Entities por Dominio**: Usar `domain/entities/` - SQLAlchemy models organizados
+3. **Schemas por Dominio**: Usar `domain/schemas/` - Pydantic schemas organizados
+4. **Endpoints por Responsabilidad**: Usar `api/v1/{domain}/` - máximo 10 endpoints por archivo
+5. **Principio de Responsabilidad Única**: Cada clase/función con UNA responsabilidad
+6. **Imports Actualizados**: SIEMPRE usar los nuevos paths de `domain/` y `services_v2/`
+7. **Compatibilidad**: Mantener wrappers `*_v2.py` para código legacy
 
 ---
 

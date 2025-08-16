@@ -2,7 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install streamlit and required packages
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install only dashboard-specific dependencies
 RUN pip install --no-cache-dir \
     streamlit==1.28.2 \
     requests==2.31.0 \

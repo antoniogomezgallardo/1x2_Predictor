@@ -1405,12 +1405,12 @@ Métricas: Accuracy, Precision, Recall, F1-Score
         # Obtener partidos de la próxima jornada para selección
         with st.spinner("Cargando partidos de la próxima jornada..."):
             # Usar endpoint específico para obtener próximos partidos por jornada
-            upcoming_matches_data = make_api_request(f"/matches/upcoming-by-round/{current_season}")
+            upcoming_matches_data = make_api_request(f"/quiniela/upcoming-by-round/{current_season}")
             
             # Fallback: si no hay endpoint específico, obtener partidos futuros limitados
             if not upcoming_matches_data:
-                la_liga_data = make_api_request(f"/matches/", {"season": current_season, "league_id": 140, "upcoming_only": True})
-                segunda_data = make_api_request(f"/matches/", {"season": current_season, "league_id": 141, "upcoming_only": True})
+                la_liga_data = make_api_request(f"/data/matches/", {"season": current_season, "league_id": 140, "upcoming_only": True})
+                segunda_data = make_api_request(f"/data/matches/", {"season": current_season, "league_id": 141, "upcoming_only": True})
                 
                 matches = []
                 if la_liga_data and isinstance(la_liga_data, list):

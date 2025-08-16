@@ -14,9 +14,10 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from backend.app.database.database import SessionLocal
-from backend.app.services.data_extractor import DataExtractor
+from backend.app.services_v2.quiniela_service import QuinielaService
 from backend.app.ml.predictor import QuinielaPredictor
-from backend.app.database.models import QuinielaPrediction, QuinielaWeek, Match
+from backend.app.domain.entities.quiniela import QuinielaPrediction, QuinielaWeek
+from backend.app.domain.entities.match import Match
 from backend.app.config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +32,7 @@ async def run_weekly_predictions(season: int, week_number: int = None):
         logger.info(f"Starting predictions for season {season}")
         
         # Initialize services
-        extractor = DataExtractor(db)
+        quiniela_service = QuinielaService(db)
         predictor = QuinielaPredictor()
         
         # Load trained model
@@ -45,7 +46,7 @@ async def run_weekly_predictions(season: int, week_number: int = None):
         
         # Get current week data
         logger.info("Fetching current week match data...")
-        quiniela_data = await extractor.get_quiniela_data(season, week_number)
+        quiniela_data = await quiniela_service.get_quiniela_data(season, week_number)
         
         if not quiniela_data:
             logger.error("No matches found for current week")
