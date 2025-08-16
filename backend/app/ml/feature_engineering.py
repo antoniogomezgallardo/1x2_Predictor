@@ -32,7 +32,8 @@ class FeatureEngineer:
         features.update(self._form_features(home_form, away_form))
         
         # League position features
-        features.update(self._position_features(home_stats, away_stats))
+        if home_stats and away_stats:
+            features.update(self._position_features(home_stats, away_stats))
         
         # Store feature names for later use
         self.feature_names = list(features.keys())

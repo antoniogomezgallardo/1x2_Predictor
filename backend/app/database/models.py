@@ -165,7 +165,7 @@ class ModelPerformance(Base):
 
 class UserQuiniela(Base):
     """
-    Quinielas personales del usuario
+    Quinielas personales del usuario con soporte para dobles, triples y Elige 8
     """
     __tablename__ = "user_quinielas"
     
@@ -176,9 +176,21 @@ class UserQuiniela(Base):
     cost = Column(Float, nullable=False)  # Lo que se gastó
     winnings = Column(Float, default=0.0)  # Lo que se ganó
     is_finished = Column(Boolean, default=False)  # Si la jornada terminó
+    
     # Pleno al 15: predicción de goles para cada equipo en el partido 15
     pleno_al_15_home = Column(String(1), nullable=True)  # Goles equipo local: "0", "1", "2", "M" 
     pleno_al_15_away = Column(String(1), nullable=True)  # Goles equipo visitante: "0", "1", "2", "M"
+    
+    # Sistema de dobles y triples
+    bet_type = Column(String(20), default='simple')  # 'simple', 'multiple', 'reduced'
+    total_combinations = Column(Integer, default=1)  # Total de combinaciones generadas
+    base_cost = Column(Float, default=0.75)  # Costo base de la quiniela (sin Elige 8)
+    
+    # Elige 8 - Juego complementario
+    elige_8_enabled = Column(Boolean, default=False)  # Si tiene Elige 8 activado
+    elige_8_matches = Column(JSON, nullable=True)  # IDs de los 8 partidos seleccionados para Elige 8
+    elige_8_cost = Column(Float, default=0.0)  # Costo del Elige 8 (€0.50 si activo)
+    elige_8_predictions = Column(JSON, nullable=True)  # Predicciones específicas para Elige 8
     
     # Estadísticas de la quiniela
     total_predictions = Column(Integer, default=14)
@@ -192,7 +204,7 @@ class UserQuiniela(Base):
     predictions = relationship("UserQuinielaPrediction", back_populates="quiniela", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<UserQuiniela(week={self.week_number}, season={self.season}, cost={self.cost})>"
+        return f"<UserQuiniela(week={self.week_number}, season={self.season}, cost={self.cost}, type={self.bet_type})>"
 
 
 class UserQuinielaPrediction(Base):
@@ -210,8 +222,10 @@ class UserQuinielaPrediction(Base):
     home_team = Column(String, nullable=False)
     away_team = Column(String, nullable=False)
     
-    # Predicción del usuario
-    user_prediction = Column(String(1), nullable=False)  # "1", "X", "2"
+    # Predicción del usuario (soporte para dobles y triples)
+    user_prediction = Column(String(1), nullable=False)  # "1", "X", "2" - predicción principal
+    multiplicity = Column(Integer, default=1)  # 1=simple, 2=doble, 3=triple
+    prediction_options = Column(JSON, nullable=True)  # ["1"], ["1","X"], ["1","X","2"] - todas las opciones marcadas
     
     # Resultado real (se rellena cuando termine el partido)
     actual_result = Column(String(1), nullable=True)  # "1", "X", "2"

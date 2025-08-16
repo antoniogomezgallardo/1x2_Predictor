@@ -15,6 +15,7 @@ from .services.advanced_data_collector import AdvancedDataCollector
 from .ml.predictor import QuinielaPredictor
 from .ml.enhanced_predictor import EnhancedQuinielaPredictor
 from .api.schemas import *
+from .api.endpoints_multiple import router as multiple_router
 from .config.settings import settings
 
 # Configure logging
@@ -35,6 +36,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(multiple_router)
 
 # Global predictor instance
 predictor = QuinielaPredictor()
@@ -247,13 +251,20 @@ async def get_matches(
 
 @app.post("/model/train")
 def train_model(
-    season: int,
-    background_tasks: BackgroundTasks,
+    season: int = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
-    """Train the prediction model with historical data"""
+    """Train the prediction model with historical data for specified season"""
     from datetime import datetime
     current_year = datetime.now().year
+    
+    # If no season provided, use current year  
+    if season is None:
+        season = current_year
+        logger.info(f"No season specified, using current year: {season}")
+    
+    logger.info(f"🎯 TRAINING REQUEST: Iniciando entrenamiento para temporada {season}")
     
     # Get historical matches with results for requested season
     completed_matches = db.query(Match).filter(
@@ -303,14 +314,18 @@ def train_model(
     # Start training in background
     def train_model_task():
         try:
-            logger.info(f"Starting model training for season {training_season} with {len(matches_to_use)} matches")
+            logger.info(f"🚀 TRAINING STARTED: Iniciando entrenamiento ML para temporada {training_season}")
+            logger.info(f"📊 TRAINING DATA: {len(matches_to_use)} partidos encontrados para entrenamiento")
             
             # Prepare training data
             from .services.data_extractor import DataExtractor
             extractor = DataExtractor(db)
             
+            logger.info(f"⚙️  TRAINING STEP 1/4: Preparando datos de entrenamiento...")
+            
             # Convert matches to training format
             training_data = []
+            processed = 0
             for match in matches_to_use:
                 if match.home_team and match.away_team and match.result:
                     match_data = {
@@ -325,35 +340,55 @@ def train_model(
                         'match_date': match.match_date
                     }
                     training_data.append(match_data)
+                    processed += 1
+                    
+                    # Log progress every 50 matches
+                    if processed % 50 == 0:
+                        progress = (processed / len(matches_to_use)) * 100
+                        logger.info(f"📈 TRAINING PROGRESS: {processed}/{len(matches_to_use)} partidos procesados ({progress:.1f}%)")
+            
+            logger.info(f"✅ TRAINING STEP 1/4: Completado - {len(training_data)} partidos válidos procesados")
             
             if len(training_data) >= 100:
+                logger.info(f"🤖 TRAINING STEP 2/4: Entrenando modelo ML con {len(training_data)} muestras...")
+                
                 # Train the model
                 training_result = predictor.train_model(training_data)
-                logger.info(f"Model training completed: {training_result}")
+                logger.info(f"✅ TRAINING STEP 2/4: Modelo entrenado exitosamente")
+                logger.info(f"📋 TRAINING RESULTS: {training_result}")
+                
+                logger.info(f"⚙️  TRAINING STEP 3/4: Configurando modelo...")
                 
                 # Mark as trained
                 predictor.is_trained = True
-                predictor.model_version = f"v{training_season}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                model_version = f"v{training_season}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                predictor.model_version = model_version
+                logger.info(f"🏷️  MODEL VERSION: {model_version}")
+                
+                logger.info(f"💾 TRAINING STEP 4/4: Guardando modelo...")
                 
                 # Save model (if save method exists)
                 try:
                     model_path = f"data/models/quiniela_model_{training_season}.pkl"
                     if hasattr(predictor, 'save_model'):
                         predictor.save_model(model_path)
-                        logger.info(f"Model saved to {model_path}")
+                        logger.info(f"✅ MODEL SAVED: Modelo guardado en {model_path}")
                     else:
-                        logger.info("Model training completed (save method not available)")
+                        logger.info(f"✅ MODEL READY: Modelo entrenado y listo (método save no disponible)")
                 except Exception as save_error:
-                    logger.warning(f"Model training succeeded but save failed: {save_error}")
+                    logger.warning(f"⚠️  SAVE WARNING: Entrenamiento exitoso pero guardado falló: {save_error}")
                 
-                logger.info(f"Model training process completed successfully")
+                logger.info(f"🎉 TRAINING COMPLETED: Proceso de entrenamiento completado exitosamente para temporada {training_season}")
+                logger.info(f"🎯 TRAINING SUMMARY: {len(training_data)} muestras procesadas, modelo v{model_version} listo")
             else:
-                logger.error(f"Insufficient training data after processing: {len(training_data)} valid matches")
+                logger.error(f"❌ TRAINING FAILED: Datos insuficientes después del procesamiento: {len(training_data)} partidos válidos (se necesitan ≥100)")
+                logger.error(f"🔍 TRAINING DEBUG: Verifica la calidad de los datos de la temporada {training_season}")
                 
         except Exception as e:
-            logger.error(f"Model training failed: {str(e)}")
+            logger.error(f"❌ TRAINING ERROR: El entrenamiento del modelo falló: {str(e)}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"🔍 TRAINING ERROR DETAILS: {traceback.format_exc()}")
+            logger.error(f"💡 TRAINING SUGGESTION: Verifica los datos de entrada y conexión a BD")
     
     # Add background task
     background_tasks.add_task(train_model_task)
@@ -372,21 +407,52 @@ def train_model(
 
 @app.get("/model/training-status")
 async def get_training_status():
-    """Get current training status of the model"""
+    """Get detailed training status of the model"""
     try:
-        return {
-            "is_trained": getattr(predictor, 'is_trained', False),
-            "model_version": getattr(predictor, 'model_version', None),
-            "training_status": "completed" if getattr(predictor, 'is_trained', False) else "not_trained",
-            "last_check": datetime.utcnow().isoformat()
+        is_trained = getattr(predictor, 'is_trained', False)
+        model_version = getattr(predictor, 'model_version', None)
+        
+        status_details = {
+            "is_trained": is_trained,
+            "model_version": model_version,
+            "training_status": "completed" if is_trained else "not_trained",
+            "last_check": datetime.utcnow().isoformat(),
+            "capabilities": {
+                "basic_predictions": True,
+                "ml_predictions": is_trained,
+                "enhanced_predictions": is_trained,
+                "fallback_mode": not is_trained
+            }
         }
+        
+        if is_trained and model_version:
+            # Extract season and timestamp from version
+            try:
+                version_parts = model_version.split('_')
+                if len(version_parts) >= 2:
+                    season = version_parts[0][1:]  # Remove 'v' prefix
+                    timestamp = version_parts[1] + "_" + version_parts[2] if len(version_parts) >= 3 else version_parts[1]
+                    status_details["trained_for_season"] = int(season)
+                    status_details["training_timestamp"] = timestamp
+                    status_details["model_ready_for"] = f"temporada {season}"
+            except (ValueError, IndexError):
+                pass
+        
+        return status_details
+        
     except Exception as e:
         logger.error(f"Error getting training status: {str(e)}")
         return {
             "is_trained": False,
             "model_version": None,
-            "training_status": "unknown",
+            "training_status": "error",
             "error": str(e),
+            "capabilities": {
+                "basic_predictions": True,
+                "ml_predictions": False,
+                "enhanced_predictions": False,
+                "fallback_mode": True
+            },
             "last_check": datetime.utcnow().isoformat()
         }
 
@@ -559,6 +625,48 @@ async def get_quiniela_oficial_predictions(season: int, db: Session = Depends(ge
     except Exception as e:
         logger.error(f"Error generating Quiniela oficial predictions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/model/requirements")
+async def get_model_requirements():
+    """
+    Explain model requirements and prediction capabilities
+    """
+    return {
+        "prediction_modes": {
+            "basic_predictor": {
+                "requires_training": False,
+                "description": "Predictor heurístico basado en factores como ventaja local, experiencia de equipo, capacidad de estadio",
+                "confidence_range": "30-45%",
+                "data_required": "Información básica de equipos y estadios",
+                "availability": "Siempre disponible",
+                "quality": "Buena para inicios de temporada y cuando faltan datos históricos"
+            },
+            "ml_predictor": {
+                "requires_training": True,
+                "description": "Modelo ML entrenado con datos históricos de partidos",
+                "confidence_range": "45-70%", 
+                "data_required": "Mínimo 100 partidos históricos con resultados",
+                "availability": "Después del entrenamiento",
+                "quality": "Excelente cuando hay suficientes datos históricos"
+            },
+            "enhanced_predictor": {
+                "requires_training": True,
+                "description": "Combinación de ML + datos avanzados (xG, xA, etc.)",
+                "confidence_range": "50-80%",
+                "data_required": "Datos ML + datos avanzados de FBRef",
+                "availability": "Con modelo entrenado + datos FBRef",
+                "quality": "La mejor calidad predictiva disponible"
+            }
+        },
+        "current_system_status": {
+            "active_mode": "basic_predictor" if not getattr(predictor, 'is_trained', False) else "ml_predictor",
+            "state_of_art_ready": True,  # Basic predictor siempre está listo
+            "training_required_for_ml": not getattr(predictor, 'is_trained', False),
+            "recommendation": "Las predicciones 'estado del arte' funcionan sin entrenamiento usando el predictor básico. El entrenamiento ML mejora la precisión cuando hay datos suficientes."
+        },
+        "important_note": "⚠️ Las predicciones estado del arte NO requieren entrenamiento ML. El sistema usa automáticamente el mejor predictor disponible (basic → ML → enhanced) según los datos disponibles."
+    }
 
 
 @app.get("/quiniela/next-matches/{season}")
@@ -2035,6 +2143,59 @@ async def get_advanced_data_status(season: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error getting advanced data status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/advanced-data/test-fbref")
+async def test_fbref_connectivity():
+    """
+    Endpoint de diagnóstico para probar conectividad con FBRef
+    """
+    try:
+        from .services.fbref_client import FBRefClient
+        
+        client = FBRefClient()
+        
+        # Probar conectividad con URLs simples
+        test_results = {
+            "fbref_connectivity": False,
+            "la_liga_access": False,
+            "segunda_access": False,
+            "errors": [],
+            "table_ids_found": [],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Test 1: La Liga
+        try:
+            la_liga_data = client.get_league_table_advanced(140, 2024)
+            if la_liga_data:
+                test_results["la_liga_access"] = True
+                test_results["fbref_connectivity"] = True
+            else:
+                test_results["errors"].append("La Liga: No data returned")
+        except Exception as e:
+            test_results["errors"].append(f"La Liga error: {str(e)}")
+        
+        # Test 2: Segunda División  
+        try:
+            segunda_data = client.get_league_table_advanced(141, 2024)
+            if segunda_data:
+                test_results["segunda_access"] = True
+                test_results["fbref_connectivity"] = True
+            else:
+                test_results["errors"].append("Segunda: No data returned")
+        except Exception as e:
+            test_results["errors"].append(f"Segunda error: {str(e)}")
+        
+        return test_results
+        
+    except Exception as e:
+        logger.error(f"Error testing FBRef connectivity: {e}")
+        return {
+            "fbref_connectivity": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 
 @app.get("/advanced-data/team-stats/{team_id}")

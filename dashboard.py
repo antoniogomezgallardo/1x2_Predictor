@@ -70,34 +70,113 @@ def make_api_request(endpoint: str, params: dict = None, method: str = "GET", sh
 
 
 def display_prediction_card(prediction):
-    """Display a prediction card"""
-    # Usar 'prediction' en lugar de 'predicted_result'
+    """Display a prediction card with improved styling using Streamlit native components"""
+    # Extraer información básica
     predicted_result = prediction.get('prediction', prediction.get('predicted_result', 'X'))
-    result_class = f"result-{predicted_result}"
-    
-    # Manejo seguro de confianza
     confidence = prediction.get('confidence', 0.5)
-    confidence_color = "green" if confidence > 0.7 else "orange" if confidence > 0.5 else "red"
-    
-    # Manejo seguro de probabilidades
     probabilities = prediction.get('probabilities', {})
     home_win = probabilities.get('home_win', 0.33)
     draw = probabilities.get('draw', 0.33)
     away_win = probabilities.get('away_win', 0.33)
     
-    st.markdown(f"""
-    <div class="prediction-card {result_class}">
-        <h4>Partido {prediction.get('match_number', '?')}: {prediction.get('home_team', '?')} vs {prediction.get('away_team', '?')}</h4>
-        <p><strong>Predicción:</strong> {predicted_result} 
-           <span style="color: {confidence_color}">({confidence:.1%} confianza)</span></p>
-        <div style="display: flex; justify-content: space-between;">
-            <span>Local: {home_win:.1%}</span>
-            <span>Empate: {draw:.1%}</span>
-            <span>Visitante: {away_win:.1%}</span>
+    # Configurar colores y texto según resultado
+    if predicted_result == "1":
+        result_emoji = "🏠"
+        result_text = "Victoria Local"
+        main_color = "#1976D2"
+    elif predicted_result == "X":
+        result_emoji = "🤝" 
+        result_text = "Empate"
+        main_color = "#F57C00"
+    else:
+        result_emoji = "✈️"
+        result_text = "Victoria Visitante"
+        main_color = "#7B1FA2"
+    
+    # Determinar color de confianza
+    if confidence > 0.6:
+        conf_color = "#2E7D32"
+    elif confidence > 0.4:
+        conf_color = "#F57C00"
+    else:
+        conf_color = "#C62828"
+    
+    # Usar contenedor con estilo simple
+    with st.container():
+        # Header con información básica
+        col1, col2, col3 = st.columns([2, 2, 1])
+        
+        with col1:
+            st.markdown(f"**🎯 Partido {prediction.get('match_number', '?')}**")
+            
+        with col2:
+            league = prediction.get('league', 'N/A')
+            if league == "Segunda División":
+                st.markdown(f'<span style="background: #FF5722; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">{league}</span>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<span style="background: #4CAF50; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">{league}</span>', unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f'<div style="text-align: right; color: {conf_color}; font-weight: bold;">{confidence:.0%}</div>', unsafe_allow_html=True)
+        
+        # Equipos
+        st.markdown(f"""
+        <div style="text-align: center; margin: 16px 0; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+            <h3 style="margin: 0; color: #333;">
+                {prediction.get('home_team', '?')} <span style="color: #666;">vs</span> {prediction.get('away_team', '?')}
+            </h3>
         </div>
-        <small>Fecha: {prediction.get('match_date', 'N/A')}</small>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        
+        # Predicción principal
+        st.markdown(f"""
+        <div style="text-align: center; margin: 16px 0; padding: 16px; background: {main_color}15; border: 2px solid {main_color}; border-radius: 12px;">
+            <div style="font-size: 1.5em; margin-bottom: 8px;">{result_emoji}</div>
+            <div style="color: {main_color}; font-size: 1.3em; font-weight: bold; margin-bottom: 8px;">{result_text}</div>
+            <div style="color: {conf_color}; font-weight: bold;">{confidence:.1%} de confianza</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Distribución de probabilidades con columnas nativas
+        st.markdown("**📊 Distribución de Probabilidades**")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            border_style = "border: 2px solid #1976D2;" if predicted_result == "1" else "border: 1px solid #ddd;"
+            st.markdown(f"""
+            <div style="text-align: center; padding: 12px; background: #E3F2FD; border-radius: 8px; {border_style}">
+                <div style="font-size: 0.9em; color: #666; margin-bottom: 4px;">🏠 Local</div>
+                <div style="font-weight: bold; color: #1976D2; font-size: 1.1em;">{home_win:.1%}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            border_style = "border: 2px solid #F57C00;" if predicted_result == "X" else "border: 1px solid #ddd;"
+            st.markdown(f"""
+            <div style="text-align: center; padding: 12px; background: #FFF8E1; border-radius: 8px; {border_style}">
+                <div style="font-size: 0.9em; color: #666; margin-bottom: 4px;">🤝 Empate</div>
+                <div style="font-weight: bold; color: #F57C00; font-size: 1.1em;">{draw:.1%}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            border_style = "border: 2px solid #7B1FA2;" if predicted_result == "2" else "border: 1px solid #ddd;"
+            st.markdown(f"""
+            <div style="text-align: center; padding: 12px; background: #F3E5F5; border-radius: 8px; {border_style}">
+                <div style="font-size: 0.9em; color: #666; margin-bottom: 4px;">✈️ Visitante</div>
+                <div style="font-weight: bold; color: #7B1FA2; font-size: 1.1em;">{away_win:.1%}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Información adicional
+        col1, col2 = st.columns(2)
+        with col1:
+            st.caption(f"📅 {prediction.get('match_date', 'N/A')}")
+        with col2:
+            st.caption(f"⚙️ {prediction.get('method', 'basic_predictor')}")
+        
+        # Separador
+        st.divider()
 
 
 def main():
