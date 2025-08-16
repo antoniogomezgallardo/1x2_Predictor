@@ -10,6 +10,12 @@
 - **Selección inteligente de temporada**: Usa temporada solicitada + fallback automático
 - **Monitoreo completo**: `docker-compose logs api | grep -E "(🚀|📊|⚙️|✅|📈|❌)"`
 
+**🏗️ Arquitectura Clean Architecture v2.1.0:**
+- **Domain-driven organization**: Endpoints, schemas y entities por dominio
+- **47 endpoints organizados** en 6 dominios: core, data, models, predictions, quiniela, analytics, advanced
+- **Backwards compatibility**: Mantenida 100% compatibilidad con versiones anteriores
+- **Environment detection**: Automático Docker vs localhost para desarrollo local
+
 **🎯 3 Niveles de Predicción Automáticos:**
 1. **Basic Predictor** (Siempre disponible): 30-45% confianza, factores heurísticos
 2. **ML Predictor** (Requiere entrenamiento): 45-70% confianza, necesita ≥100 partidos
@@ -143,6 +149,7 @@ Sistema de predicción de resultados para la Quiniela Española que utiliza Mach
 - **Nuevas Tablas**: Soporte completo para dobles/triples y Elige 8
 - **Configuraciones**: Sistema de configuraciones personalizadas guardadas
 - **Auditoría**: Tracking completo de precisión y rendimiento financiero
+- **⚠️ CRÍTICO**: Los match IDs guardados en configuraciones pueden quedar obsoletos tras migraciones/reimportaciones. Validar siempre existencia de matches antes de usar configuraciones guardadas.
 
 #### 4. **Machine Learning**
 - **Basic Predictor**: Heurísticas inteligentes, siempre disponible
@@ -304,6 +311,25 @@ docker-compose logs api | grep -E "(🚀|📊|⚙️|✅|📈|❌)"
 # Verificar dashboard con nueva paleta
 open http://localhost:8501
 ```
+
+### **Lecciones Aprendidas - Mejores Prácticas v2.1.0**
+
+**🔍 Debugging Sistemático:**
+- **Problema típico**: Cambios arquitecturales pueden crear inconsistencias en datos existentes
+- **Solución**: Validar siempre que IDs referenciados existen tras migraciones
+- **Metodología**: Debug paso a paso simulando lógica del endpoint antes de asumir errores de código
+
+**🏗️ Reorganización de Código:**
+- **REGLA CRÍTICA**: Todos los cambios deben mantener 100% backwards compatibility
+- **Validación**: Testear endpoints existentes después de cualquier reorganización
+- **Environment Detection**: Implementar detección automática Docker vs localhost para evitar problemas recurrentes
+
+**⚡ Flujo de Resolución de Errores:**
+1. **Identificar error específico** (no asumir la causa)
+2. **Simular paso a paso** la lógica que falla
+3. **Validar datos** - IDs, referencias, existencia en BD
+4. **Fix targeted** - cambio mínimo necesario
+5. **Commit inmediato** - evitar acumulación de cambios
 
 ### **Nueva Estructura Clean Architecture v2.1.0**
 
