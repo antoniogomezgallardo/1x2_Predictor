@@ -8,7 +8,18 @@ import json
 
 # Configuration
 import os
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+# Always use localhost for development, regardless of environment variables
+# Only use Docker internal hostname when explicitly running inside Docker container
+def get_api_base_url():
+    # Check if we're running inside a Docker container
+    if os.path.exists('/.dockerenv'):
+        return os.getenv("API_BASE_URL", "http://api:8000")
+    else:
+        # Force localhost for local development
+        return "http://localhost:8000"
+
+API_BASE_URL = get_api_base_url()
 
 # Page configuration
 st.set_page_config(
